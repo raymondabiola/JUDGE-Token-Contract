@@ -10,7 +10,6 @@ import {ReentrancyGuard} from "../lib/openzeppelin-contracts/contracts/utils/Ree
 
 contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, AccessControl, ERC20Capped, ReentrancyGuard{
 bytes32 constant public MINTER_ROLE = keccak256("MINTER_ROLE");
-bytes32 constant public PAUSER_ROLE = keccak256("PAUSER_ROLE");
 bytes32 constant public SNAPSHOT_ROLE = keccak256("SNAPSHOT_ROLE");
 
 constructor (uint256 initialSupply) 
@@ -20,7 +19,6 @@ ERC20Permit("JudgeToken")
 {
     _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     _grantRole(MINTER_ROLE, msg.sender);
-    _grantRole(PAUSER_ROLE, msg.sender);
     _grantRole(SNAPSHOT_ROLE, msg.sender);
 
     _mint(msg.sender, initialSupply);
@@ -30,4 +28,11 @@ function mint(address to, uint amount)external onlyRole(MINTER_ROLE){
     _mint(to, amount);
 }
 
+function setRoleAdmin(bytes32 role, bytes32 adminRole)external onlyRole(DEFAULT_ADMIN_ROLE){
+_setRoleAdmin(role, adminRole);
+}
+
+function _update(address from, address to, uint value) internal override (ERC20, ERC20Capped){
+    super._update(from, to, value);
+}
 }
