@@ -12,6 +12,8 @@ import {Nonces} from "../lib/openzeppelin-contracts/contracts/utils/Nonces.sol";
 contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessControl, ERC20Capped{
 bytes32 constant public MINTER_ROLE = keccak256("MINTER_ROLE");
 
+event Minted(address indexed caller, address indexed to, uint amount);
+
 constructor (uint256 initialSupply) 
 ERC20 ("JudgeToken", "JUDGE")
 ERC20Capped(100_000_000*10**decimals())
@@ -20,10 +22,12 @@ ERC20Permit("JudgeToken")
     _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     _grantRole(MINTER_ROLE, msg.sender);
     _mint(msg.sender, initialSupply);
+emit Minted(msg.sender, msg.sender, initialSupply);
 }
 
 function mint(address to, uint amount)external onlyRole(MINTER_ROLE){
     _mint(to, amount);
+    emit Minted(msg.sender, to, amount);
 }
 
 function setRoleAdmin(bytes32 role, bytes32 adminRole)external onlyRole(DEFAULT_ADMIN_ROLE){
@@ -34,7 +38,7 @@ function _update(address from, address to, uint value) internal override (ERC20,
     super._update(from, to, value);
 }
 
-function nonces(address owner) public view override(Nonces) returns(uint256){
+function nonces(address owner) public view override(ERC20Permit, Nonces) returns(uint256){
     return super.nonces(owner);
 }
 }
