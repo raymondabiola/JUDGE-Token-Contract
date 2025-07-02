@@ -26,6 +26,29 @@ uint256 initialSupply = 1_000_000 * 10 ** uint256(decimals);
 judgeToken = new JudgeToken(initialSupply);
     }
 
+function testName()public{
+
+}
+
+function testSymbol()public{
+
+}
+
+function testDecimals()public{
+
+}
+
+function testTotalSupply()public{
+
+}
+
+    function testDeployerIsOwner()public{
+              bytes32 minterRole = judgeToken.MINTER_ROLE();
+              bytes32 defaultAdmin = judgeToken.DEFAULT_ADMIN_ROLE();
+              assertTrue(judgeToken.hasRole(defaultAdmin, owner));
+              assertTrue(judgeToken.hasRole(minterRole, owner));
+    }
+
     function testMint()public{
         uint256 mintAmount = 10_000 * 10 ** uint256(decimals);
         bytes32 minterRole = judgeToken.MINTER_ROLE();
@@ -42,8 +65,78 @@ judgeToken = new JudgeToken(initialSupply);
             )
         );
         judgeToken.mint(user1, mintAmount);
-
-
     }
 
+function testBurn()public{
+    uint256 mintAmount = 100_000 * 10 ** uint256(decimals);
+    uint256 burnAmount = 10_000 * 10 ** uint256(decimals);
+        judgeToken.mint(user1, mintAmount);
+        vm.prank(user1);
+        judgeToken.burn(burnAmount);
+        assertEq(mintAmount - burnAmount, judgeToken.balanceOf(user1));
+}
+
+function testBurnFrom()public{
+
+}
+
+function testBalanceOf()public{
+
+}
+
+function testTransfer()public{
+
+}
+
+function testAllowance()public{
+
+}
+
+function testApprove()public{
+
+}
+
+function testTransferFrom()public{
+    
+}
+
+function testHasRole()public{
+
+}
+
+function testGetRoleAdmin()public{
+
+}
+
+function testGrantRole()public{
+
+}
+
+function testRevokeRole()public{
+
+}
+
+function testRenounceRole()public{
+
+}
+
+function testSupportsInteface()public{
+
+}
+
+function testCap()public{
+
+}
+
+function testNumCheckpoints()public{
+
+}
+
+function testCheckPoints()public{
+
+}
+
+function testPermit()public{
+
+}
 }
