@@ -14,6 +14,7 @@ bytes32 constant public MINTER_ROLE = keccak256("MINTER_ROLE");
 
 event Minted(address indexed caller, address indexed to, uint amount);
 
+
 constructor (uint256 initialSupply) 
 ERC20 ("JudgeToken", "JUDGE")
 ERC20Capped(100_000_000*10**decimals())
