@@ -14,16 +14,15 @@ bytes32 constant public MINTER_ROLE = keccak256("MINTER_ROLE");
 
 event Minted(address indexed caller, address indexed to, uint amount);
 
-
 constructor (uint256 initialSupply) 
-ERC20 ("JudgeToken", "JUDGE")
-ERC20Capped(100_000_000*10**decimals())
-ERC20Permit("JudgeToken")
+    ERC20 ("JudgeToken", "JUDGE")
+    ERC20Capped(100_000_000*10**decimals())
+    ERC20Permit("JudgeToken")
 {
     _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     _grantRole(MINTER_ROLE, msg.sender);
     _mint(msg.sender, initialSupply);
-emit Minted(msg.sender, msg.sender, initialSupply);
+    emit Minted(msg.sender, msg.sender, initialSupply);
 }
 
 function mint(address to, uint amount)external onlyRole(MINTER_ROLE){
@@ -32,7 +31,7 @@ function mint(address to, uint amount)external onlyRole(MINTER_ROLE){
 }
 
 function setRoleAdmin(bytes32 role, bytes32 adminRole)external onlyRole(DEFAULT_ADMIN_ROLE){
-_setRoleAdmin(role, adminRole);
+    _setRoleAdmin(role, adminRole);
 }
 
 function _update(address from, address to, uint value) internal override (ERC20, ERC20Capped, ERC20Votes){
@@ -41,5 +40,9 @@ function _update(address from, address to, uint value) internal override (ERC20,
 
 function nonces(address owner) public view override(ERC20Permit, Nonces) returns(uint256){
     return super.nonces(owner);
+}
+
+function getTotalSupply()public view returns(uint256){
+   return _getTotalSupply();
 }
 }

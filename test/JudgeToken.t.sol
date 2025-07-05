@@ -2,9 +2,12 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
+import "forge-std/console.sol";
 import "../src/JudgeToken.sol";
+import {Checkpoints} from "../lib/openzeppelin-contracts/contracts/utils/structs/Checkpoints.sol";
 
 contract JudgeTokenTest is Test{
+   
     JudgeToken public judgeToken;
     address public owner;
     address public zeroAddress;
@@ -22,6 +25,7 @@ contract JudgeTokenTest is Test{
     error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed);
     error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed);
     error AccessControlBadConfirmation();
+
 
     function setUp() public{
         owner = address(this);
@@ -313,10 +317,6 @@ contract JudgeTokenTest is Test{
         judgeToken.renounceRole(minterRole, user1);
     }
 
-    function testSetRoleAdmin()public{
-
-    }
-
     function testNonces()public{
 
     }
@@ -326,23 +326,48 @@ contract JudgeTokenTest is Test{
     }
 
     function testDelegate()public{
-        
+        judgeToken.delegate(user1);
+        assertEq(judgeToken.getVotes(owner), 0);
+        assertEq(judgeToken.balanceOf(owner), initialSupply);
+        assertEq(judgeToken.getVotes(user1), initialSupply);
     }
 
     function testDelegates()public{
-
+        judgeToken.delegate(user1);
+        assertEq(judgeToken.delegates(owner), user1);
     }
 
     function testGetVotes()public{
-
+        assertEq(judgeToken.getVotes(owner), 0);
+        judgeToken.delegate(user1);
+        assertEq(judgeToken.getVotes(owner), 0);
+        assertEq(judgeToken.getVotes(user1), initialSupply);
     }
 
     function testGetPastVotes()public{
+        uint256 amount = 100_000 * 10 ** uint256(decimals);
+        judgeToken.delegate(owner);
+        assertEq(judgeToken.getVotes(owner), initialSupply);
+        uint256 timePoint = block.number;
 
+        for(uint i; i<10; i++){
+        vm.roll(block.number +1);
+        }
+        judgeToken.transfer(user1, amount);
+        assertEq(judgeToken.getVotes(owner), initialSupply-amount);
+        assertEq(judgeToken.getPastVotes(owner, timePoint), initialSupply);
+        assertEq(judgeToken.getPastVotes(user1, timePoint), 0);
     }
 
     function testGetPastTotalSupply()public{
-
+        uint256 timePoint1 = block.number;
+        uint256 amount = 100_500 * 10 ** uint256(decimals);
+        for(uint i; i<10 ; i++){
+            vm.roll(block.number + 1);
+        }
+        judgeToken.mint(user2, amount);
+        assertEq(judgeToken.getPastTotalSupply(timePoint1), initialSupply);
+        assertEq(judgeToken.getTotalSupply(), initialSupply + amount);
     }
 
     function testDelegateBySig()public{
@@ -350,11 +375,56 @@ contract JudgeTokenTest is Test{
     }
 
     function testNumCheckpoints()public{
+        uint256 amount = 100_000 * 10 ** uint256(decimals);
+        judgeToken.delegate(owner);
 
+        for(uint i; i<5; i++){
+            vm.roll(block.number + 1);
+        }
+        judgeToken.transfer(user1, amount);
+
+        for(uint i; i<10; i++){
+            vm.roll(block.number + 1);
+        }
+        judgeToken.transfer(user2, amount);
+
+        assertEq(judgeToken.numCheckpoints(owner), 3);
     }
 
     function testCheckPoints()public{
+        uint256 amount = 10_000 * 10 ** uint256(decimals);
+        uint256 amount2 = 100_500 * 10 ** uint256(decimals);
+        assertEq(judgeToken.numCheckpoints(owner), 0);
+        for(uint i; i<10 ; i++){
+            vm.roll(block.number + 1);
+        }
+        judgeToken.delegate(owner);
 
+         for(uint i; i<10 ; i++){
+            vm.roll(block.number + 1);
+        }
+        judgeToken.transfer(user1, amount);
+
+        for(uint i; i<10 ; i++){
+            vm.roll(block.number + 1);
+        }
+        judgeToken.mint(owner, amount2);
+
+        uint32 num = judgeToken.numCheckpoints(owner);
+
+        for(uint32 i=0; i<num; i++){
+        Checkpoints.Checkpoint208 memory ckpt = judgeToken.checkpoints(owner, i);
+        console.log("Checkpoint", i);
+        console.log("fromBlock", ckpt._key);
+        console.log("Votes", ckpt._value);
+        }
+
+        Checkpoints.Checkpoint208 memory ckpt1 = judgeToken.checkpoints(owner, 0);
+        assertEq(ckpt1._value, initialSupply);
+        Checkpoints.Checkpoint208 memory ckpt2 = judgeToken.checkpoints(owner, 1);
+        assertEq(ckpt2._value, initialSupply - amount);
+        Checkpoints.Checkpoint208 memory ckpt3 = judgeToken.checkpoints(owner, 2);
+        assertEq(ckpt3._value, initialSupply - amount + amount2);
     }
 
     function testPermit()public{
@@ -364,4 +434,4 @@ contract JudgeTokenTest is Test{
     function testDOMAIN_SEPERATOR()public{
 
     }
-}
+    }
