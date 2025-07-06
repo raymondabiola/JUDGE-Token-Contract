@@ -5,12 +5,15 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "../src/JudgeToken.sol";
 import {Checkpoints} from "../lib/openzeppelin-contracts/contracts/utils/structs/Checkpoints.sol";
+import {IAccessControl} from "../lib/openzeppelin-contracts/contracts/access/IAccessControl.sol";
+import {IERC165} from "../lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol";
 
 contract JudgeTokenTest is Test{
    
     JudgeToken public judgeToken;
     address public owner;
     address public zeroAddress;
+    uint256 pKey = 0x450802246;
     address public user1;
     address public user2;
     address public user3;
@@ -26,11 +29,10 @@ contract JudgeTokenTest is Test{
     error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed);
     error AccessControlBadConfirmation();
 
-
     function setUp() public{
         owner = address(this);
         zeroAddress = address(0);
-        user1 = makeAddr("user1");
+        user1 = vm.addr(pKey);
         user2 = makeAddr("user2");
         user3 = makeAddr("user3");
         judgeToken = new JudgeToken(initialSupply);
@@ -317,12 +319,9 @@ contract JudgeTokenTest is Test{
         judgeToken.renounceRole(minterRole, user1);
     }
 
-    function testNonces()public{
-
-    }
-
-    function testSupportsInteface()public{
-
+    function testSupportsInterface()public{
+        assertTrue(judgeToken.supportsInterface(type(IERC165).interfaceId));
+        assertTrue(judgeToken.supportsInterface(type(IAccessControl).interfaceId));
     }
 
     function testDelegate()public{
@@ -368,10 +367,6 @@ contract JudgeTokenTest is Test{
         judgeToken.mint(user2, amount);
         assertEq(judgeToken.getPastTotalSupply(timePoint1), initialSupply);
         assertEq(judgeToken.getTotalSupply(), initialSupply + amount);
-    }
-
-    function testDelegateBySig()public{
-
     }
 
     function testNumCheckpoints()public{
@@ -427,7 +422,77 @@ contract JudgeTokenTest is Test{
         assertEq(ckpt3._value, initialSupply - amount + amount2);
     }
 
+    function getPermitDigest(
+         string memory name,
+        string memory version,
+        address tokenAddress,
+        uint256 chainId,
+        address signer,
+        address spender,
+        uint256 value,
+        uint256 nonce,
+        uint256 deadline
+    ) internal pure returns (bytes32) {
+        bytes32 DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(bytes(name)),
+                keccak256(bytes(version)),
+                chainId,
+                tokenAddress
+            )
+        );
+
+        bytes32 PERMIT_TYPEHASH = keccak256(
+            "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+        );
+
+        return keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(
+                    abi.encode(
+                        PERMIT_TYPEHASH,
+                        signer,
+                        spender,
+                        value,
+                        nonce,
+                        deadline
+                    )
+                )
+            )
+        );
+    }
+
+    function testNonces()public{
+        assertEq(judgeToken.nonces(user1), 0);
+        uint256 value = 10_000 * 10 ** uint256(decimals);
+        uint256  user1Nonce = judgeToken.nonces(user1);
+        uint256 deadline = block.timestamp + 1 days;
+        bytes32 digest = getPermitDigest(
+        "JudgeToken",
+        "1",
+        address(judgeToken),
+        block.chainid,
+        user1,
+        user2,
+        value,
+        user1Nonce,
+        deadline
+    );
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            pKey, digest);
+        judgeToken.permit(user1, user2, value, deadline, v, r, s);
+        assertEq(judgeToken.nonces(user1), 1);
+    }
+
     function testPermit()public{
+
+    }
+
+    function testDelegateBySig()public{
 
     }
 
@@ -435,3 +500,4 @@ contract JudgeTokenTest is Test{
 
     }
     }
+    
