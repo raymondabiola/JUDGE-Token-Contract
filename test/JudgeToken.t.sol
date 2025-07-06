@@ -28,6 +28,7 @@ contract JudgeTokenTest is Test{
     error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed);
     error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed);
     error AccessControlBadConfirmation();
+    error ERC2612ExpiredSignature(uint256 deadline);
 
     function setUp() public{
         owner = address(this);
@@ -489,7 +490,63 @@ contract JudgeTokenTest is Test{
     }
 
     function testPermit()public{
+        uint256 mintValue = 150_000 * 10 ** uint256(decimals);
+        uint256 value = 10_000 * 10 ** uint256(decimals);
+        judgeToken.mint(user1, mintValue);
+        uint256  nonce = judgeToken.nonces(user1);
+        uint256 deadline = block.timestamp + 1 days;
+        bytes32 digest = getPermitDigest(
+        "JudgeToken",
+        "1",
+        address(judgeToken),
+        block.chainid,
+        user1,
+        user2,
+        value,
+        nonce,
+        deadline
+    );
 
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            pKey, digest);
+        judgeToken.permit(user1, user2, value, deadline, v, r, s);
+        assertEq(judgeToken.allowance(user1, user2), value);
+
+        vm.prank(user2);
+        judgeToken.transferFrom(user1, user2, value);
+        assertEq(judgeToken.allowance(user1, user2), 0);
+        assertEq(judgeToken.balanceOf(user2), value);
+        assertEq(judgeToken.balanceOf(user1), mintValue-value);
+    }
+
+    function testRevertForExpiredSig()public{
+        uint256 mintValue = 150_000 * 10 ** uint256(decimals);
+        uint256 value = 10_000 * 10 ** uint256(decimals);
+        judgeToken.mint(user1, mintValue);
+        uint256  nonce = judgeToken.nonces(user1);
+        uint256 deadline = block.timestamp + 1 days;
+        bytes32 digest = getPermitDigest(
+        "JudgeToken",
+        "1",
+        address(judgeToken),
+        block.chainid,
+        user1,
+        user2,
+        value,
+        nonce,
+        deadline
+    );
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+            pKey, digest);
+         vm.warp(deadline + 1 days);
+         vm.expectRevert(
+            abi.encodeWithSelector(
+                ERC2612ExpiredSignature.selector,
+                deadline
+            )
+         );
+        judgeToken.permit(user1, user2, value, deadline, v, r, s);
     }
 
     function testDelegateBySig()public{
