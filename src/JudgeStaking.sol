@@ -27,14 +27,15 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     bytes32 DEFAULT_ADMIN_ROLE = keccak256("DEFAULT_ADMIN_ROLE");
 
     event RewardsFunded(uint256 amount);
-    event Deposited(address indexed addr, uint256 amount);
-    event Withdrawn(address indexed addr, uint256 amount);
+    event Deposited(address indexed user, uint256 amount);
+    event Withdrawn(address indexed user, uint256 amount);
     event EmergencyWithdrawal(
         address indexed admin,
         address indexed user,
         uint256 stakeWithdrawn,
         uint256 rewardPaid
     );
+    event RewardPerBlockUpdated(uint newValue);
 
     error InvalidAmount();
     error InsufficientBal();
@@ -56,6 +57,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 newRewardPerBlock
     ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         rewardPerBlock = newRewardPerBlock;
+        emit RewardPerBlockUpdated(newRewardPerBlock);
     }
 
     function updatePool() internal {
