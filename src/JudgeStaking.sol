@@ -5,6 +5,7 @@ import {AccessControl} from "../lib/openzeppelin-contracts/contracts/access/Acce
 import {ReentrancyGuard} from "../lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {SafeERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {JudgeToken} from "./JudgeToken.sol";
+import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 contract JudgeStaking is AccessControl, ReentrancyGuard {
     using SafeERC20 for JudgeToken;
@@ -56,6 +57,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     error InvalidLockUpPeriod();
     error AlreadyMatured();
     error TooHigh();
+    error RecoveryOfJudgeNA();
 
     constructor(address _judgeTokenAddress, uint256 _rewardPerBlock, uint256 _earlyWithdrawPenaltyPercent) {
         require(earlyWithdrawPenaltyPercent <= 10, TooHigh());
@@ -64,7 +66,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         rewardPerBlock = _rewardPerBlock;
         earlyWithdrawPenaltyPercent = _earlyWithdrawPenaltyPercent;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        emit RewardPerBlockUpdated(newRewardPerBlock);
+        emit RewardPerBlockUpdated(_rewardPerBlock);
     }
 
     function fundReward(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -73,9 +75,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit RewardsFunded(amount);
     }
 
-    function setNewRewardPerBlock(uint256 newRewardPerBlock) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        rewardPerBlock = newRewardPerBlock;
-        emit RewardPerBlockUpdated(newRewardPerBlock);
+    function setNewRewardPerBlock(uint256 _rewardPerBlock) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        rewardPerBlock = _rewardPerBlock;
+        emit RewardPerBlockUpdated(_rewardPerBlock);
     }
 
     function setNewEarlyWithdrawPercent(uint256 _earlyWithdrawPenaltyPercent) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -276,5 +278,11 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return (stake.calculatedStakeForReward * tempAccJudgePerShare) / SCALE - stake.rewardDebt;
     }
 
-    function recoverERC20() external onlyRole(DEFAULT_ADMIN_ROLE) {}
+    function recoverERC20(address _strandedTokenAddr, address _addr, uint256 _amount)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        require(_strandedTokenAddr != address(judgeToken), RecoveryOfJudgeNA());
+        IERC20(_strandedTokenAddr).transfer(_addr, _amount);
+    }
 }
