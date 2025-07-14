@@ -7,10 +7,16 @@ import {SafeERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/uti
 import {JudgeToken} from "./JudgeToken.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
+interface IRewardsManager {
+    function sendRewards(address _addr, uint256 _amount) external;
+}
+
 contract JudgeStaking is AccessControl, ReentrancyGuard {
     using SafeERC20 for JudgeToken;
 
     JudgeToken public judgeToken;
+    IRewardsManager public rewardsManager;
+
     uint256 private newStakeId;
     uint256 public accJudgePerShare;
     uint256 public rewardPerBlock;
@@ -20,8 +26,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint256 private constant SCALE = 1e18;
     address[] internal users;
     uint256 private constant maxLockUpPeriod = 360;
-    uint256 earlyWithdrawPenaltyPercent;
-    uint256 totalPenalties;
+    uint256 public earlyWithdrawPenaltyPercent;
+    uint256 public totalPenalties;
     bool public emergencyFuncCalled;
 
     struct userStake {
@@ -48,6 +54,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     event RewardPerBlockUpdated(uint256 newValue);
     event EarlyWithdrawPenaltyPercentUpdated(uint256 newValue);
     event EarlyWithdrawalPenalty(address indexed user, uint256 block, uint256 penalty);
+    event ClaimedReward(address indexed user, uint256 rewards);
 
     error InvalidAmount();
     error InvalidIndex();
@@ -57,22 +64,24 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     error InvalidLockUpPeriod();
     error AlreadyMatured();
     error TooHigh();
+    error ZeroStakeBalance();
     error RecoveryOfJudgeNA();
 
-    constructor(address _judgeTokenAddress, uint256 _rewardPerBlock, uint256 _earlyWithdrawPenaltyPercent) {
+    constructor(
+        address _judgeTokenAddress,
+        address _rewardsManagerAddress,
+        uint256 _rewardPerBlock,
+        uint256 _earlyWithdrawPenaltyPercent
+    ) {
         require(earlyWithdrawPenaltyPercent <= 10, TooHigh());
+
+        rewardsManager = IRewardsManager(_rewardsManagerAddress);
         judgeToken = JudgeToken(_judgeTokenAddress);
         newStakeId = 1;
         rewardPerBlock = _rewardPerBlock;
         earlyWithdrawPenaltyPercent = _earlyWithdrawPenaltyPercent;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         emit RewardPerBlockUpdated(_rewardPerBlock);
-    }
-
-    function fundReward(uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(amount > 0, InvalidAmount());
-        judgeToken.safeTransferFrom(msg.sender, address(this), amount);
-        emit RewardsFunded(amount);
     }
 
     function setNewRewardPerBlock(uint256 _rewardPerBlock) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -137,6 +146,20 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit Deposited(msg.sender, _amount);
     }
 
+    function claimRewards(uint256 _index) external {
+        require(_index < userStakes[msg.sender].length, InvalidIndex());
+        userStake storage stake = userStakes[msg.sender][_index];
+        require(stake.amountStaked > 0, ZeroStakeBalance());
+
+        updatePool();
+        uint256 pending = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE - stake.rewardDebt;
+        if (pending > 0) {
+            rewardsManager.sendRewards(msg.sender, pending);
+        }
+        stake.rewardDebt = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE;
+        emit ClaimedReward(msg.sender, pending);
+    }
+
     function withdraw(uint256 _amount, uint256 _index) external nonReentrant {
         require(_amount > 0, InvalidAmount());
         require(_index < userStakes[msg.sender].length, InvalidIndex());
@@ -147,7 +170,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         updatePool();
         uint256 pending = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE - stake.rewardDebt;
         if (pending > 0) {
-            judgeToken.safeTransfer(msg.sender, pending);
+            rewardsManager.sendRewards(msg.sender, pending);
         }
         totalCalculatedStakeForReward -= stake.calculatedStakeForReward;
         stake.amountStaked -= _amount;
@@ -166,7 +189,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         updatePool();
         uint256 pending = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE - stake.rewardDebt;
         if (pending > 0) {
-            judgeToken.safeTransfer(msg.sender, pending);
+            rewardsManager.sendRewards(msg.sender, pending);
         }
 
         uint256 amountWithdrawn = stake.amountStaked;
@@ -190,7 +213,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         updatePool();
         uint256 pending = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE - stake.rewardDebt;
         if (pending > 0) {
-            judgeToken.safeTransfer(msg.sender, pending);
+            rewardsManager.sendRewards(msg.sender, pending);
         }
 
         totalCalculatedStakeForReward -= stake.calculatedStakeForReward;
@@ -226,7 +249,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                 if (stake.amountStaked > 0) {
                     uint256 pending = (stake.amountStaked * accJudgePerShare) / SCALE - stake.rewardDebt;
 
-                    judgeToken.safeTransfer(userAddr, pending);
+                    rewardsManager.sendRewards(msg.sender, pending);
 
                     uint256 amount = stake.amountStaked;
                     totalCalculatedStakeForReward -= stake.calculatedStakeForReward;
