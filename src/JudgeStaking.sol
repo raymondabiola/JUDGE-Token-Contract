@@ -51,7 +51,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     event EmergencyWithdrawal(
         address indexed admin, address indexed user, uint256 stakeID, uint256 stakeWithdrawn, uint256 rewardPaid
     );
-    event RewardPerBlockUpdated(uint256 newValue);
+    event JudgeTokenAddressInitialized(address indexed judgeTokenAddress);
+    event KeyParameterInitialized(address indexed by, address indexed RewardsManager);
+    event KeyParameterUpdated(address indexed by, address indexed newRewardsManager);
+    event RewardsPerBlockInitialized(uint256 value);
+    event RewardsPerBlockUpdated(uint256 newValue);
+    event EarlyWithdrawPenaltyPercentInitialized(uint256 newValue);
     event EarlyWithdrawPenaltyPercentUpdated(uint256 newValue);
     event EarlyWithdrawalPenalty(address indexed user, uint256 block, uint256 penalty);
     event ClaimedReward(address indexed user, uint256 rewards);
@@ -70,6 +75,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     error ContractBalanceNotEnough();
     error SetRewardsMangerAsZeroAddr();
     error AlreadyInitialized();
+    error InputedThisContractAddress();
+    error EOANotAllowed();
 
     constructor(
         address _judgeTokenAddress,
@@ -79,6 +86,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     ) {
         require(_rewardsManagerAddress == address(0), SetRewardsMangerAsZeroAddr());
         require(_judgeTokenAddress != address(0), InvalidAddress());
+        require(_judgeTokenAddress != address(this), InputedThisContractAddress());
+        require(_judgeTokenAddress.code.length > 0, EOANotAllowed());
         require(earlyWithdrawPenaltyPercent <= 10, TooHigh());
 
         rewardsManager = IRewardsManager(_rewardsManagerAddress);
@@ -87,20 +96,36 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         rewardPerBlock = _rewardPerBlock;
         earlyWithdrawPenaltyPercent = _earlyWithdrawPenaltyPercent;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        emit RewardPerBlockUpdated(_rewardPerBlock);
+        emit JudgeTokenAddressInitialized(_judgeTokenAddress);
+        emit RewardsPerBlockInitialized(_rewardPerBlock);
+        emit EarlyWithdrawPenaltyPercentInitialized(_earlyWithdrawPenaltyPercent);
     }
 
-    function InitializeKeyParameters(address _rewardsManagerAddress) external {
+    function initializeKeyParameter(address _rewardsManagerAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(address(rewardsManager) == address(0), AlreadyInitialized());
+        require(_rewardsManagerAddress != address(0), InvalidAddress());
+        require(_rewardsManagerAddress != address(this), InputedThisContractAddress());
+        require(_rewardsManagerAddress.code.length > 0, EOANotAllowed());
+
         rewardsManager = IRewardsManager(_rewardsManagerAddress);
+        emit KeyParameterInitialized(msg.sender, _rewardsManagerAddress);
     }
 
-    function setNewRewardPerBlock(uint256 _rewardPerBlock) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function updateKeyParameter(address _rewardsManagerAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_rewardsManagerAddress != address(0), InvalidAddress());
+        require(_rewardsManagerAddress != address(this), InputedThisContractAddress());
+        require(_rewardsManagerAddress.code.length > 0, EOANotAllowed());
+
+        rewardsManager = IRewardsManager(_rewardsManagerAddress);
+        emit KeyParameterUpdated(msg.sender, _rewardsManagerAddress);
+    }
+
+    function updateRewardPerBlock(uint256 _rewardPerBlock) external onlyRole(DEFAULT_ADMIN_ROLE) {
         rewardPerBlock = _rewardPerBlock;
-        emit RewardPerBlockUpdated(_rewardPerBlock);
+        emit RewardsPerBlockUpdated(_rewardPerBlock);
     }
 
-    function setNewEarlyWithdrawPenaltyPercent(uint256 _earlyWithdrawPenaltyPercent)
+    function updateEarlyWithdrawPenaltyPercent(uint256 _earlyWithdrawPenaltyPercent)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
@@ -330,7 +355,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     {
         require(_strandedTokenAddr != address(0) && _addr != address(0), InvalidAddress());
         require(_amount > 0, InvalidAmount());
-        require(_amount < address(this).balance, ContractBalanceNotEnough());
+        require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), ContractBalanceNotEnough());
         require(_strandedTokenAddr != address(judgeToken), RecoveryOfJudgeNA());
         IERC20(_strandedTokenAddr).transfer(_addr, _amount);
     }
