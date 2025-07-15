@@ -16,7 +16,7 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
 
     constructor(uint256 initialSupply)
         ERC20("JudgeToken", "JUDGE")
-        ERC20Capped(100_000_000 * 10 ** decimals())
+        ERC20Capped(500_000_000 * 10 ** decimals())
         ERC20Permit("JudgeToken")
     {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);

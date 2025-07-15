@@ -57,6 +57,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     event ClaimedReward(address indexed user, uint256 rewards);
 
     error InvalidAmount();
+    error InvalidAddress();
     error InvalidIndex();
     error InsufficientBal();
     error AlreadyTriggered();
@@ -66,6 +67,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     error TooHigh();
     error ZeroStakeBalance();
     error RecoveryOfJudgeNA();
+    error ContractBalanceNotEnough();
+    error SetRewardsMangerAsZeroAddr();
+    error AlreadyInitialized();
 
     constructor(
         address _judgeTokenAddress,
@@ -73,6 +77,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 _rewardPerBlock,
         uint256 _earlyWithdrawPenaltyPercent
     ) {
+        require(_rewardsManagerAddress == address(0), SetRewardsMangerAsZeroAddr());
+        require(_judgeTokenAddress != address(0), InvalidAddress());
         require(earlyWithdrawPenaltyPercent <= 10, TooHigh());
 
         rewardsManager = IRewardsManager(_rewardsManagerAddress);
@@ -84,13 +90,22 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit RewardPerBlockUpdated(_rewardPerBlock);
     }
 
+    function InitializeKeyParameters(address _rewardsManagerAddress) external {
+        require(address(rewardsManager) == address(0), AlreadyInitialized());
+        rewardsManager = IRewardsManager(_rewardsManagerAddress);
+    }
+
     function setNewRewardPerBlock(uint256 _rewardPerBlock) external onlyRole(DEFAULT_ADMIN_ROLE) {
         rewardPerBlock = _rewardPerBlock;
         emit RewardPerBlockUpdated(_rewardPerBlock);
     }
 
-    function setNewEarlyWithdrawPercent(uint256 _earlyWithdrawPenaltyPercent) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(earlyWithdrawPenaltyPercent <= 10, TooHigh());
+    function setNewEarlyWithdrawPenaltyPercent(uint256 _earlyWithdrawPenaltyPercent)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        require(_earlyWithdrawPenaltyPercent > 0, InvalidAmount());
+        require(_earlyWithdrawPenaltyPercent <= 10, TooHigh());
         earlyWithdrawPenaltyPercent = _earlyWithdrawPenaltyPercent;
         emit EarlyWithdrawPenaltyPercentUpdated(_earlyWithdrawPenaltyPercent);
     }
@@ -110,6 +125,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     function deposit(uint256 _amount, uint256 _lockUpPeriodInDays) external {
         require(_amount > 0, InvalidAmount());
+        require(_lockUpPeriodInDays > 0, InvalidAmount());
         require(_lockUpPeriodInDays <= maxLockUpPeriod, InvalidLockUpPeriod());
         if (!isUser[msg.sender]) {
             users.push(msg.sender);
@@ -232,6 +248,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
         totalStaked -= deduction;
         totalPenalties += penalty;
+        judgeToken.safeTransfer(address(rewardsManager), penalty);
         judgeToken.safeTransfer(msg.sender, _amount);
         emit Withdrawn(msg.sender, _amount);
         emit EarlyWithdrawalPenalty(msg.sender, block.number, penalty);
@@ -269,14 +286,16 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function viewMyStakeAtIndex(uint256 _index) external view returns (userStake memory) {
+        require(_index < userStakes[msg.sender].length, InvalidIndex());
         return userStakes[msg.sender][_index];
     }
 
-    function getUserList() external view onlyRole(DEFAULT_ADMIN_ROLE) returns (address[] memory) {
+    function viewUsersList() external view onlyRole(DEFAULT_ADMIN_ROLE) returns (address[] memory) {
         return users;
     }
 
     function viewUserStakes(address addr) external view onlyRole(DEFAULT_ADMIN_ROLE) returns (userStake[] memory) {
+        require(addr != address(0), InvalidAddress());
         return userStakes[addr];
     }
 
@@ -286,10 +305,13 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         onlyRole(DEFAULT_ADMIN_ROLE)
         returns (userStake memory)
     {
+        require(addr != address(0), InvalidAddress());
+        require(_index < userStakes[addr].length, InvalidIndex());
         return userStakes[addr][_index];
     }
 
     function viewMyPendingRewards(uint256 _index) external view returns (uint256) {
+        require(_index < userStakes[msg.sender].length, InvalidIndex());
         userStake memory stake = userStakes[msg.sender][_index];
         uint256 tempAccJudgePerShare = accJudgePerShare;
 
@@ -298,13 +320,17 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             uint256 totalReward = blocksPassed * rewardPerBlock;
             tempAccJudgePerShare += (totalReward * SCALE) / totalCalculatedStakeForReward;
         }
-        return (stake.calculatedStakeForReward * tempAccJudgePerShare) / SCALE - stake.rewardDebt;
+        uint256 pendingReward = (stake.calculatedStakeForReward * tempAccJudgePerShare) / SCALE - stake.rewardDebt;
+        return pendingReward;
     }
 
     function recoverERC20(address _strandedTokenAddr, address _addr, uint256 _amount)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
+        require(_strandedTokenAddr != address(0) && _addr != address(0), InvalidAddress());
+        require(_amount > 0, InvalidAmount());
+        require(_amount < address(this).balance, ContractBalanceNotEnough());
         require(_strandedTokenAddr != address(judgeToken), RecoveryOfJudgeNA());
         IERC20(_strandedTokenAddr).transfer(_addr, _amount);
     }

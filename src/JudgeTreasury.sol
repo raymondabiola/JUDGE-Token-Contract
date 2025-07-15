@@ -21,11 +21,21 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     error InvalidAmount();
     error InsufficientBal();
-    error InvalidAddr();
+    error InvalidAddress();
     error RecoveryOfJudgeNA();
+    error InputedThisContractAddress();
+    error ContractBalanceNotEnough();
+    error AlreadyInitialized();
+    error SetRewardsMangerAsZeroAddr();
 
     constructor(address _judgeTokenAddress, address _rewardsManagerAddress) {
+        require(_rewardsManagerAddress == address(0), SetRewardsMangerAsZeroAddr());
         judgeToken = JudgeToken(_judgeTokenAddress);
+        rewardsManager = RewardsManager(_rewardsManagerAddress);
+    }
+
+    function initializeKeyParameters(address _rewardsManagerAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(address(rewardsManager) == address(0), AlreadyInitialized());
         rewardsManager = RewardsManager(_rewardsManagerAddress);
     }
 
@@ -39,13 +49,15 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     }
 
     function mintToTreasury(uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_amount > 0, InvalidAmount());
         judgeToken.mint(address(this), _amount);
     }
 
     function transferFromTreasury(address _addr, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(_addr != address(0), InvalidAddr());
-        require(_amount <= address(this).balance, InsufficientBal());
+        require(_addr != address(0), InvalidAddress());
+        require(_addr != address(this), InputedThisContractAddress());
         require(_amount > 0, InvalidAmount());
+        require(_amount <= address(this).balance, InsufficientBal());
         judgeToken.safeTransfer(_addr, _amount);
 
         if (_addr == address(rewardsManager)) {
@@ -57,6 +69,9 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
+        require(_strandedTokenAddr != address(0) && _addr != address(0), InvalidAddress());
+        require(_amount > 0, InvalidAmount());
+        require(_amount < address(this).balance, ContractBalanceNotEnough());
         require(_strandedTokenAddr != address(judgeToken), RecoveryOfJudgeNA());
         IERC20(_strandedTokenAddr).transfer(_addr, _amount);
     }
