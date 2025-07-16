@@ -349,6 +349,24 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return pendingReward;
     }
 
+    function calculateMisplacedJudge() public view onlyRole(DEFAULT_ADMIN_ROLE) returns (uint256) {
+        uint256 contractBalance = judgeToken.balanceOf(address(this));
+        uint256 totalStakesAndPenalties = totalStaked + totalPenalties;
+        uint256 misplacedJudge = contractBalance - totalStakesAndPenalties;
+        return misplacedJudge;
+    }
+
+    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 misplacedJudge = calculateMisplacedJudge();
+        require(_to != address(0), InvalidAddress());
+        require(_to != address(this), InputedThisContractAddress());
+        require(_amount > 0, InvalidAmount());
+        require(_amount <= misplacedJudge, InvalidAmount());
+        require(judgeToken.balanceOf(address(this)) > 0, ContractBalanceNotEnough());
+        judgeToken.safeTransfer(_to, _amount);
+    }
+
+
     function recoverERC20(address _strandedTokenAddr, address _addr, uint256 _amount)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)

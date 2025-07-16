@@ -18,6 +18,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     uint256 public stakingRewardsFundsFromTreasury;
+    uint256 internal treasuryPreciseBalance;
 
     event JudgeTokenAddressInitialized(address indexed judgeTokenAddress);
     event RewardsManagerAddressInitialized(address indexed rewardsManagerAddress);
@@ -80,6 +81,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     function mintToTreasury(uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_amount > 0, InvalidAmount());
         judgeToken.mint(address(this), _amount);
+        treasuryPreciseBalance += _amount;
 
         emit MintedToTreasury(_amount);
     }
@@ -91,11 +93,28 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         require(_amount <= judgeToken.balanceOf(address(this)), InsufficientBal());
         judgeToken.safeTransfer(_addr, _amount);
 
+        treasuryPreciseBalance -= _amount;
+
         if (_addr == address(rewardsManager)) {
             stakingRewardsFundsFromTreasury += _amount;
 
             emit TransferredFromTreasury(_addr, _amount);
         }
+    }
+
+    function calculateMisplacedJudge() public view onlyRole(DEFAULT_ADMIN_ROLE) returns (uint256) {
+        uint256 misplacedJudge = judgeToken.balanceOf(address(this)) - treasuryPreciseBalance;
+        return misplacedJudge;
+    }
+
+    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 misplacedJudge = calculateMisplacedJudge();
+        require(_to != address(0), InvalidAddress());
+        require(_to != address(this), InputedThisContractAddress());
+        require(_amount > 0, InvalidAmount());
+        require(_amount <= misplacedJudge, InvalidAmount());
+        require(judgeToken.balanceOf(address(this)) > 0, ContractBalanceNotEnough());
+        judgeToken.safeTransfer(_to, _amount);
     }
 
     function recoverERC20(address _strandedTokenAddr, address _addr, uint256 _amount)
