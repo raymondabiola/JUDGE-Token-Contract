@@ -56,33 +56,24 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     {
         require(address(judgeTreasury) == address(0) && address(judgeStaking) == address(0), AlreadyInitialized());
         require(_judgeTreasuryAddress != address(0) && _judgeStakingAddress != address(0), InvalidAddress());
-        require(
-            _judgeTreasuryAddress != address(this) && _judgeStakingAddress != address(this),
-            InputedThisContractAddress()
-        );
+        require(_judgeTreasuryAddress != address(this) && _judgeStakingAddress != address(this), InputedThisContractAddress());
         require(_judgeTreasuryAddress.code.length > 0 && _judgeStakingAddress.code.length > 0, EOANotAllowed());
-
+        
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
         judgeStaking = JudgeStaking(_judgeStakingAddress);
 
-        _grantRole(REWARD_DISTRIBUTOR_ROLE, _judgeStakingAddress);
+         _grantRole(REWARD_DISTRIBUTOR_ROLE, _judgeStakingAddress);
 
         emit JudgeTreasuryAddressInitialized(_judgeTreasuryAddress);
         emit JudgeStakingAddressInitialized(_judgeStakingAddress);
         emit RewardDistributorWasSet(msg.sender, _judgeStakingAddress);
     }
 
-    function updateKeyParameters(address _judgeTreasuryAddress, address _judgeStakingAddress)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    function updateKeyParameters(address _judgeTreasuryAddress, address _judgeStakingAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_judgeTreasuryAddress != address(0) && _judgeStakingAddress != address(0), InvalidAddress());
-        require(
-            _judgeTreasuryAddress != address(this) && _judgeStakingAddress != address(this),
-            InputedThisContractAddress()
-        );
+        require(_judgeTreasuryAddress != address(this) && _judgeStakingAddress != address(this), InputedThisContractAddress());
         require(_judgeTreasuryAddress.code.length > 0 && _judgeStakingAddress.code.length > 0, EOANotAllowed());
-
+        
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
         judgeStaking = JudgeStaking(_judgeStakingAddress);
 
@@ -95,12 +86,12 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
 
     function sendRewards(address _addr, uint256 _amount) external onlyRole(REWARD_DISTRIBUTOR_ROLE) nonReentrant {
         require(_addr != address(0), InvalidAddress());
-        require(_amount <= address(this).balance, ContractBalanceNotEnough());
+        require(_amount <= judgeToken.balanceOf(address(this)), ContractBalanceNotEnough());
         judgeToken.safeTransfer(_addr, _amount);
         totalRewardsPaid += _amount;
     }
 
-    function adminWithdrawal(address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function adminWithdrawal(address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
         require(_to != address(0), InvalidAddress());
         require(_to != address(this), InputedThisContractAddress());
         require(_amount > 0, InvalidAmount());
@@ -109,40 +100,40 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         emit AdminWithdrawed(msg.sender, _to, _amount);
     }
 
-    function emergencyWithdrawal(address _to) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function emergencyWithdrawal(address _to) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
         require(_to != address(0), InvalidAddress());
         require(_to != address(this), InputedThisContractAddress());
-        require(address(this).balance > 0, ContractBalanceNotEnough());
-        judgeToken.safeTransfer(_to, address(this).balance);
+        require(judgeToken.balanceOf(address(this)) > 0, ContractBalanceNotEnough());
+        judgeToken.safeTransfer(_to, judgeToken.balanceOf(address(this)) );
 
-        emit EmergencyWithdrawal(msg.sender, _to, address(this).balance);
+        emit EmergencyWithdrawal(msg.sender, _to, judgeToken.balanceOf(address(this)));
     }
 
     function calculateMisplacedJudge() public view onlyRole(DEFAULT_ADMIN_ROLE) returns (uint256) {
-        uint256 contractBalance = address(this).balance;
+        uint256 contractBalance = judgeToken.balanceOf(address(this));
         uint256 fundsFromTreasury = judgeTreasury.stakingRewardsFundsFromTreasury();
         uint256 penaltiesFromJudgeStaking = judgeStaking.totalPenalties();
         uint256 misplacedJudge = contractBalance + totalRewardsPaid - fundsFromTreasury - penaltiesFromJudgeStaking;
         return misplacedJudge;
     }
 
-    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
         uint256 misplacedJudge = calculateMisplacedJudge();
         require(_to != address(0), InvalidAddress());
         require(_to != address(this), InputedThisContractAddress());
         require(_amount > 0, InvalidAmount());
         require(_amount <= misplacedJudge, InvalidAmount());
-        require(address(this).balance > 0, ContractBalanceNotEnough());
+        require(judgeToken.balanceOf(address(this)) > 0, ContractBalanceNotEnough());
         judgeToken.safeTransfer(_to, _amount);
     }
 
     function recoverERC20(address _strandedTokenAddr, address _addr, uint256 _amount)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    nonReentrant{
         require(_strandedTokenAddr != address(0) && _addr != address(0), InvalidAddress());
         require(_amount > 0, InvalidAmount());
-        require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), ContractBalanceNotEnough());
+         require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), ContractBalanceNotEnough());
         require(_strandedTokenAddr != address(judgeToken), RecoveryOfJudgeNA());
         IERC20(_strandedTokenAddr).transfer(_addr, _amount);
     }
