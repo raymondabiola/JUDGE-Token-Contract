@@ -22,7 +22,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint256 private newStakeId;
     uint256 public accJudgePerShare;
     uint256 internal rewardsPerQuarter;
-    uint256 public rewardPerBlock;
+    uint256 internal rewardsPerBlock;
     uint256 public lastRewardBlock;
     uint256 public totalCalculatedStakeForReward;
     uint256 public totalStaked;
@@ -32,11 +32,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint256 public earlyWithdrawPenaltyPercent;
     uint256 public totalPenalties;
     bool public emergencyFuncCalled;
+    uint256 public constant maxPenaltyPercent = 10;
 
     struct userStake {
         uint256 id;
         uint256 amountStaked;
-        uint256 lockUpPeriod;
+        uint32 lockUpPeriod;
         uint256 lockUpRatio;
         uint256 calculatedStakeForReward;
         uint256 depositTimestamp;
@@ -76,7 +77,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     error ZeroStakeBalance();
     error RecoveryOfJudgeNA();
     error ContractBalanceNotEnough();
-    error SetRewardsMangerAsZeroAddr();
+    error RewardsMangerAndTreasuryPlaceholderAsZeroAddr();
     error AlreadyInitialized();
     error InputedThisContractAddress();
     error EOANotAllowed();
@@ -85,25 +86,39 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         address _judgeTokenAddress,
         address _rewardsManagerAddress,
         address _judgeTreasuryAddress,
-        uint256 _rewardPerBlock,
+        uint256 _rewardsPerBlock,
         uint256 _earlyWithdrawPenaltyPercent
-    ) {
-        require(_rewardsManagerAddress == address(0) && _judgeTreasuryAddress == address(0), SetRewardsMangerAsZeroAddr());
-        require(_judgeTokenAddress != address(0), InvalidAddress());
+    ) validAddress(_judgeTokenAddress) {
+        require(_rewardsManagerAddress == address(0) && _judgeTreasuryAddress == address(0), RewardsMangerAndTreasuryPlaceholderAsZeroAddr());
         require(_judgeTokenAddress != address(this), InputedThisContractAddress());
         require(_judgeTokenAddress.code.length > 0, EOANotAllowed());
-        require(earlyWithdrawPenaltyPercent <= 10, TooHigh());
+        require(earlyWithdrawPenaltyPercent <= maxPenaltyPercent, TooHigh());
 
         rewardsManager = IRewardsManager(_rewardsManagerAddress);
         judgeToken = JudgeToken(_judgeTokenAddress);
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
         newStakeId = 1;
-        rewardPerBlock = _rewardPerBlock;
+        rewardsPerBlock = _rewardsPerBlock;
         earlyWithdrawPenaltyPercent = _earlyWithdrawPenaltyPercent;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         emit JudgeTokenAddressInitialized(_judgeTokenAddress);
-        emit RewardsPerBlockInitialized(_rewardPerBlock);
+        emit RewardsPerBlockInitialized(_rewardsPerBlock);
         emit EarlyWithdrawPenaltyPercentInitialized(_earlyWithdrawPenaltyPercent);
+    }
+
+    modifier validAmount(uint256 _amount){
+         require(_amount > 0, InvalidAmount());
+         _;
+    }
+
+    modifier validAddress(address addr){
+              require(addr != address(0), InvalidAddress());
+              _;
+    }
+
+    modifier validIndex(uint256 _index){
+        require(_index < userStakes[msg.sender].length, InvalidIndex());
+        _;
     }
 
     function initializeKeyParameters(address _rewardsManagerAddress, address _judgeTreasuryAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
@@ -127,25 +142,22 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit KeyParameterUpdated(msg.sender, _rewardsManagerAddress);
     }
 
-    function updateRewardPerBlock(uint256 _rewardPerBlock) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        rewardPerBlock = _rewardPerBlock;
-        emit RewardsPerBlockUpdated(_rewardPerBlock);
-    }
-
     function updateEarlyWithdrawPenaltyPercent(uint256 _earlyWithdrawPenaltyPercent)
-        external
+        external validAmount(_earlyWithdrawPenaltyPercent)
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        require(_earlyWithdrawPenaltyPercent > 0, InvalidAmount());
         require(_earlyWithdrawPenaltyPercent <= 10, TooHigh());
         earlyWithdrawPenaltyPercent = _earlyWithdrawPenaltyPercent;
         emit EarlyWithdrawPenaltyPercentUpdated(_earlyWithdrawPenaltyPercent);
     }
 
-    function calculateRewardsPerBlock()public onlyRole(DEFAULT_ADMIN_ROLE){
-uint256 numberOfSecondsPerQuarter = 90 * 24 * 60 * 60;
-uint256 numberOfBlocksPerQuarter = numberOfSecondsPerQuarter / 12;
-uint256 rewardsPerQuarter = judgeTreasury.rewardsPerQuarter();
+    function updateRewardsPerBlock()public onlyRole(DEFAULT_ADMIN_ROLE)returns(uint256){
+        uint256 numberOfSecondsPerQuarter = 90 days;
+        uint256 sepoliaBlockTime = 12 seconds;
+        uint256 numberOfBlocksPerQuarter = numberOfSecondsPerQuarter / sepoliaBlockTime;
+        rewardsPerQuarter = judgeTreasury.quarterlyReward();
+        rewardsPerBlock = rewardsPerQuarter / numberOfBlocksPerQuarter;
+        return rewardsPerBlock;
     }
 
     function updatePool() internal {
@@ -156,14 +168,18 @@ uint256 rewardsPerQuarter = judgeTreasury.rewardsPerQuarter();
             lastRewardBlock = block.number;
         }
         uint256 blocksPassed = block.number - lastRewardBlock;
-        uint256 totalReward = blocksPassed * rewardPerBlock;
+        uint256 totalReward = blocksPassed * updateRewardsPerBlock();
         accJudgePerShare += (totalReward * SCALE) / totalCalculatedStakeForReward;
         lastRewardBlock = block.number;
     }
 
-    function deposit(uint256 _amount, uint256 _lockUpPeriodInDays) external {
-        require(_amount > 0, InvalidAmount());
-        require(_lockUpPeriodInDays > 0, InvalidAmount());
+    function accumulatedStakeRewards(uint256 _index) internal returns(uint256){
+         userStake storage stake = userStakes[msg.sender][_index];
+        uint256 accRewards = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE;
+        return accRewards;
+    }
+
+    function deposit(uint256 _amount, uint32 _lockUpPeriodInDays) external validAmount(_amount) validAmount(_lockUpPeriodInDays) {
         require(_lockUpPeriodInDays <= maxLockUpPeriod, InvalidLockUpPeriod());
         if (!isUser[msg.sender]) {
             users.push(msg.sender);
@@ -172,7 +188,7 @@ uint256 rewardsPerQuarter = judgeTreasury.rewardsPerQuarter();
 
         updatePool();
         uint256 amountStaked = _amount;
-        uint256 lockUpPeriod = _lockUpPeriodInDays;
+        uint32 lockUpPeriod = _lockUpPeriodInDays;
         uint256 lockUpRatio = (lockUpPeriod * SCALE) / maxLockUpPeriod;
         uint256 calculatedStakeForReward = (amountStaked * lockUpRatio) / SCALE;
         uint256 depositTimestamp = block.timestamp;
@@ -200,29 +216,26 @@ uint256 rewardsPerQuarter = judgeTreasury.rewardsPerQuarter();
         emit Deposited(msg.sender, _amount);
     }
 
-    function claimRewards(uint256 _index) external nonReentrant{
-        require(_index < userStakes[msg.sender].length, InvalidIndex());
+    function claimRewards(uint256 _index) external validIndex(_index) nonReentrant{
         userStake storage stake = userStakes[msg.sender][_index];
         require(stake.amountStaked > 0, ZeroStakeBalance());
 
         updatePool();
-        uint256 pending = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE - stake.rewardDebt;
+        uint256 pending = accumulatedStakeRewards(_index) - stake.rewardDebt;
         if (pending > 0) {
             rewardsManager.sendRewards(msg.sender, pending);
         }
-        stake.rewardDebt = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE;
+        stake.rewardDebt = accumulatedStakeRewards(_index);
         emit ClaimedReward(msg.sender, pending);
     }
 
-    function withdraw(uint256 _amount, uint256 _index) external nonReentrant {
-        require(_amount > 0, InvalidAmount());
-        require(_index < userStakes[msg.sender].length, InvalidIndex());
+    function withdraw(uint256 _amount, uint256 _index) external validAmount(_amount) validIndex(_index) nonReentrant {
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.timestamp >= stake.maturityTimestamp, NotYetMatured());
         require(_amount <= stake.amountStaked, InsufficientBal());
 
         updatePool();
-        uint256 pending = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE - stake.rewardDebt;
+        uint256 pending = accumulatedStakeRewards(_index) - stake.rewardDebt;
         if (pending > 0) {
             rewardsManager.sendRewards(msg.sender, pending);
         }
@@ -230,18 +243,17 @@ uint256 rewardsPerQuarter = judgeTreasury.rewardsPerQuarter();
         stake.amountStaked -= _amount;
         stake.calculatedStakeForReward = (stake.amountStaked * stake.lockUpRatio) / SCALE;
         totalCalculatedStakeForReward += stake.calculatedStakeForReward;
-        stake.rewardDebt = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE;
+        stake.rewardDebt = accumulatedStakeRewards(_index);
         totalStaked -= _amount;
         judgeToken.safeTransfer(msg.sender, _amount);
         emit Withdrawn(msg.sender, _amount);
     }
 
-    function withdrawAll(uint256 _index) external nonReentrant {
-        require(_index < userStakes[msg.sender].length, InvalidIndex());
+    function withdrawAll(uint256 _index) external validIndex(_index) nonReentrant {
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.timestamp >= stake.maturityTimestamp, NotYetMatured());
         updatePool();
-        uint256 pending = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE - stake.rewardDebt;
+        uint256 pending = accumulatedStakeRewards(_index) - stake.rewardDebt;
         if (pending > 0) {
             rewardsManager.sendRewards(msg.sender, pending);
         }
@@ -256,16 +268,14 @@ uint256 rewardsPerQuarter = judgeTreasury.rewardsPerQuarter();
         emit Withdrawn(msg.sender, amountWithdrawn);
     }
 
-    function earlyWithdraw(uint256 _index, uint256 _amount) external nonReentrant{
-        require(_amount > 0, InvalidAmount());
-        require(_index < userStakes[msg.sender].length, InvalidIndex());
+    function earlyWithdraw(uint256 _index, uint256 _amount) external validAmount(_amount) validIndex(_index) nonReentrant{
 
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.timestamp < stake.maturityTimestamp, AlreadyMatured());
         require(_amount <= stake.amountStaked, InsufficientBal());
 
         updatePool();
-        uint256 pending = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE - stake.rewardDebt;
+        uint256 pending = accumulatedStakeRewards(_index) - stake.rewardDebt;
         if (pending > 0) {
             rewardsManager.sendRewards(msg.sender, pending);
         }
@@ -282,7 +292,7 @@ uint256 rewardsPerQuarter = judgeTreasury.rewardsPerQuarter();
             stake.amountStaked -= deduction;
             stake.calculatedStakeForReward = (stake.amountStaked * stake.lockUpRatio) / SCALE;
             totalCalculatedStakeForReward += stake.calculatedStakeForReward;
-            stake.rewardDebt = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE;
+            stake.rewardDebt = accumulatedStakeRewards(_index);
         }
         totalStaked -= deduction;
         totalPenalties += penalty;
@@ -298,7 +308,7 @@ uint256 rewardsPerQuarter = judgeTreasury.rewardsPerQuarter();
         for (uint256 i; i < users.length; i++) {
             address userAddr = users[i];
             for (uint256 j; j < userStakes[users[i]].length; j++) {
-                userStake memory stake = userStakes[users[i]][j];
+                userStake storage stake = userStakes[users[i]][j];
 
                 updatePool();
                 if (stake.amountStaked > 0) {
@@ -323,8 +333,7 @@ uint256 rewardsPerQuarter = judgeTreasury.rewardsPerQuarter();
         return userStakes[msg.sender];
     }
 
-    function viewMyStakeAtIndex(uint256 _index) external view returns (userStake memory) {
-        require(_index < userStakes[msg.sender].length, InvalidIndex());
+    function viewMyStakeAtIndex(uint256 _index) external view validIndex(_index) returns (userStake memory) {
         return userStakes[msg.sender][_index];
     }
 
@@ -332,30 +341,27 @@ uint256 rewardsPerQuarter = judgeTreasury.rewardsPerQuarter();
         return users;
     }
 
-    function viewUserStakes(address addr) external view onlyRole(DEFAULT_ADMIN_ROLE) returns (userStake[] memory) {
-        require(addr != address(0), InvalidAddress());
+    function viewUserStakes(address addr) external view validAddress(addr) onlyRole(DEFAULT_ADMIN_ROLE) returns (userStake[] memory) {
         return userStakes[addr];
     }
 
     function viewUserStakeAtIndex(address addr, uint256 _index)
         external
-        view
+        view validAddress(addr)
         onlyRole(DEFAULT_ADMIN_ROLE)
         returns (userStake memory)
     {
-        require(addr != address(0), InvalidAddress());
         require(_index < userStakes[addr].length, InvalidIndex());
         return userStakes[addr][_index];
     }
 
-    function viewMyPendingRewards(uint256 _index) external view returns (uint256) {
-        require(_index < userStakes[msg.sender].length, InvalidIndex());
+    function viewMyPendingRewards(uint256 _index) external view validIndex(_index) returns (uint256) {
         userStake memory stake = userStakes[msg.sender][_index];
         uint256 tempAccJudgePerShare = accJudgePerShare;
 
         if (block.number > lastRewardBlock && totalCalculatedStakeForReward > 0) {
             uint256 blocksPassed = block.number - lastRewardBlock;
-            uint256 totalReward = blocksPassed * rewardPerBlock;
+            uint256 totalReward = blocksPassed * rewardsPerBlock;
             tempAccJudgePerShare += (totalReward * SCALE) / totalCalculatedStakeForReward;
         }
         uint256 pendingReward = (stake.calculatedStakeForReward * tempAccJudgePerShare) / SCALE - stake.rewardDebt;
@@ -369,11 +375,9 @@ uint256 rewardsPerQuarter = judgeTreasury.rewardsPerQuarter();
         return misplacedJudge;
     }
 
-    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
+    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) validAmount(_amount) validAddress(_to) nonReentrant{
         uint256 misplacedJudge = calculateMisplacedJudge();
-        require(_to != address(0), InvalidAddress());
         require(_to != address(this), InputedThisContractAddress());
-        require(_amount > 0, InvalidAmount());
         require(_amount <= misplacedJudge, InvalidAmount());
         require(judgeToken.balanceOf(address(this)) > 0, ContractBalanceNotEnough());
         judgeToken.safeTransfer(_to, _amount);
@@ -382,10 +386,9 @@ uint256 rewardsPerQuarter = judgeTreasury.rewardsPerQuarter();
 
     function recoverERC20(address _strandedTokenAddr, address _addr, uint256 _amount)
         external
-        onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyRole(DEFAULT_ADMIN_ROLE) validAmount(_amount)
     nonReentrant{
         require(_strandedTokenAddr != address(0) && _addr != address(0), InvalidAddress());
-        require(_amount > 0, InvalidAmount());
         require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), ContractBalanceNotEnough());
         require(_strandedTokenAddr != address(judgeToken), RecoveryOfJudgeNA());
         IERC20(_strandedTokenAddr).transfer(_addr, _amount);

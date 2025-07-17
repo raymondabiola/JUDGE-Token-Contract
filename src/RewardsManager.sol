@@ -15,8 +15,9 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     JudgeToken public judgeToken;
     JudgeTreasury public judgeTreasury;
     JudgeStaking public judgeStaking;
-    uint256 public totalRewardsPaid;
+
     bytes32 public constant REWARD_DISTRIBUTOR_ROLE = keccak256("REWARD_DISTRIBUTOR_ROLE");
+    uint256 public totalRewardsPaid;
 
     event JudgeTokenAddressInitialized(address indexed judgeTokenAddress);
     event JudgeTreasuryAddressInitialized(address indexed judgeTreasuryAddress);
@@ -34,21 +35,35 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     error EOANotAllowed();
     error RecoveryOfJudgeNA();
     error ContractBalanceNotEnough();
-    error SetTreasuryAndStakingAsZeroAddr();
+    error TreasuryAndStakingPlaceholderAsZeroAddr();
     error AlreadyInitialized();
 
-    constructor(address _judgeTokenAddress, address _judgeTreasuryAddress, address _judgeStakingAddress) {
+    constructor(address _judgeTokenAddress, address _judgeTreasuryAddress, address _judgeStakingAddress) validAddress(_judgeTokenAddress) nonThisContract(_judgeTokenAddress) {
         require(
-            _judgeTreasuryAddress == address(0) && _judgeStakingAddress == address(0), SetTreasuryAndStakingAsZeroAddr()
+            _judgeTreasuryAddress == address(0) && _judgeStakingAddress == address(0), TreasuryAndStakingPlaceholderAsZeroAddr()
         );
-        require(_judgeTokenAddress != address(0), InvalidAddress());
-        require(_judgeTokenAddress != address(this), InputedThisContractAddress());
         require(_judgeTokenAddress.code.length > 0, EOANotAllowed());
         judgeToken = JudgeToken(_judgeTokenAddress);
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
         judgeStaking = JudgeStaking(_judgeStakingAddress);
         emit JudgeTokenAddressInitialized(_judgeTokenAddress);
     }
+
+     modifier validAddress(address _to){
+              require(_to != address(0), InvalidAddress());
+              _;
+    }
+
+    modifier nonThisContract(address _to){
+        require(_to != address(this), InputedThisContractAddress());
+        _;
+    }
+
+       modifier validAmount(uint256 _amount){
+         require(_amount > 0, InvalidAmount());
+         _;
+    }
+
 
     function initializeKeyParameters(address _judgeTreasuryAddress, address _judgeStakingAddress)
         external
@@ -84,25 +99,19 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         emit RewardDistributorWasSet(msg.sender, _judgeStakingAddress);
     }
 
-    function sendRewards(address _addr, uint256 _amount) external onlyRole(REWARD_DISTRIBUTOR_ROLE) nonReentrant {
-        require(_addr != address(0), InvalidAddress());
+    function sendRewards(address _addr, uint256 _amount) external onlyRole(REWARD_DISTRIBUTOR_ROLE) validAddress(_addr) nonReentrant {
         require(_amount <= judgeToken.balanceOf(address(this)), ContractBalanceNotEnough());
         judgeToken.safeTransfer(_addr, _amount);
         totalRewardsPaid += _amount;
     }
 
-    function adminWithdrawal(address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
-        require(_to != address(0), InvalidAddress());
-        require(_to != address(this), InputedThisContractAddress());
-        require(_amount > 0, InvalidAmount());
+    function adminWithdrawal(address _to, uint256 _amount) external validAddress(_to) validAmount(_amount) nonThisContract(_to) onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
         judgeToken.safeTransfer(_to, _amount);
 
         emit AdminWithdrawed(msg.sender, _to, _amount);
     }
 
-    function emergencyWithdrawal(address _to) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
-        require(_to != address(0), InvalidAddress());
-        require(_to != address(this), InputedThisContractAddress());
+    function emergencyWithdrawal(address _to) external validAddress(_to) nonThisContract(_to) onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
         require(judgeToken.balanceOf(address(this)) > 0, ContractBalanceNotEnough());
         judgeToken.safeTransfer(_to, judgeToken.balanceOf(address(this)) );
 
@@ -117,11 +126,8 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         return misplacedJudge;
     }
 
-    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
+    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external validAddress(_to) validAmount(_amount) nonThisContract(_to)  onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
         uint256 misplacedJudge = calculateMisplacedJudge();
-        require(_to != address(0), InvalidAddress());
-        require(_to != address(this), InputedThisContractAddress());
-        require(_amount > 0, InvalidAmount());
         require(_amount <= misplacedJudge, InvalidAmount());
         require(judgeToken.balanceOf(address(this)) > 0, ContractBalanceNotEnough());
         judgeToken.safeTransfer(_to, _amount);
@@ -130,9 +136,9 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     function recoverERC20(address _strandedTokenAddr, address _addr, uint256 _amount)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
+        validAmount(_amount)
     nonReentrant{
         require(_strandedTokenAddr != address(0) && _addr != address(0), InvalidAddress());
-        require(_amount > 0, InvalidAmount());
          require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), ContractBalanceNotEnough());
         require(_strandedTokenAddr != address(judgeToken), RecoveryOfJudgeNA());
         IERC20(_strandedTokenAddr).transfer(_addr, _amount);

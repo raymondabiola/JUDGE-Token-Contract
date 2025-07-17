@@ -14,14 +14,14 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     JudgeToken public judgeToken;
     RewardsManager public rewardsManager;
 
-    uint256 decimals = 18;
+    uint256 decimals = judgeToken.decimals();
 
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     uint256 public stakingRewardsFundsFromTreasury;
     uint256 internal treasuryPreciseBalance;
-    uint256 public quarterlyReward = 1_250_000 * 10 ** uint256(decimals);
-    uint256 public totalStakingRewardBudget = 50_000_000 * 10 ** uint256(decimals);
-    uint256 public teamDevelopmentBudget = 50_000_000 * 10 ** uint256(decimals);
+    uint256 public quarterlyReward = 1_250_000 * 10 ** decimals;
+    uint256 public immutable totalStakingRewardBudget = 50_000_000 * 10 ** decimals;
+    uint256 public immutable teamDevelopmentBudget = 50_000_000 * 10 ** decimals;
 
 
     event JudgeTokenAddressInitialized(address indexed judgeTokenAddress);
@@ -38,14 +38,14 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error InputedThisContractAddress();
     error ContractBalanceNotEnough();
     error AlreadyInitialized();
-    error SetRewardsMangerAsZeroAddr();
+    error RewardsMangerPlaceholderAsZeroAddr();
     error EOANotAllowed();
     error TotalStakingRewardBudgetExceeded();
     error TeamDevelpomentBudgetExceeded();
     error ExceededMaxMintable();
 
     constructor(address _judgeTokenAddress, address _rewardsManagerAddress) {
-        require(_rewardsManagerAddress == address(0), SetRewardsMangerAsZeroAddr());
+        require(_rewardsManagerAddress == address(0), RewardsMangerPlaceholderAsZeroAddr());
         require(_judgeTokenAddress != address(0), InvalidAddress());
         require(_judgeTokenAddress != address(this), InputedThisContractAddress());
         require(_judgeTokenAddress.code.length > 0, EOANotAllowed());
@@ -55,9 +55,18 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         emit JudgeTokenAddressInitialized(_judgeTokenAddress);
     }
 
-    function initializeKeyParameter(address _rewardsManagerAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    modifier validAmount(uint256 _amount){
+         require(_amount > 0, InvalidAmount());
+         _;
+    }
+
+     modifier validAddress(address _addr){
+              require(_addr != address(0), InvalidAddress());
+              _;
+    }
+
+    function initializeKeyParameter(address _rewardsManagerAddress) external validAddress(_rewardsManagerAddress) onlyRole(DEFAULT_ADMIN_ROLE) {
         require(address(rewardsManager) == address(0), AlreadyInitialized());
-        require(_rewardsManagerAddress != address(0), InvalidAddress());
         require(_rewardsManagerAddress != address(this), InputedThisContractAddress());
         require(_rewardsManagerAddress.code.length > 0, EOANotAllowed());
         rewardsManager = RewardsManager(_rewardsManagerAddress);
@@ -65,8 +74,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         emit RewardsManagerAddressInitialized(_rewardsManagerAddress);
     }
 
-    function updateKeyParameter(address _rewardsManagerAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(_rewardsManagerAddress != address(0), InvalidAddress());
+    function updateKeyParameter(address _rewardsManagerAddress) external validAddress(_rewardsManagerAddress) onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_rewardsManagerAddress != address(this), InputedThisContractAddress());
         require(_rewardsManagerAddress.code.length > 0, EOANotAllowed());
         rewardsManager = RewardsManager(_rewardsManagerAddress);
@@ -82,8 +90,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         emit RewardsManagerFunded(quarterlyReward);
     }
 
-    function mintToTreasury(uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(_amount > 0, InvalidAmount());
+    function mintToTreasuryReserve(uint256 _amount) external validAmount(_amount) onlyRole(DEFAULT_ADMIN_ROLE){
         require(_amount <= judgeToken.mintableJudgeAmount(), ExceededMaxMintable());
         judgeToken.mint(address(this), _amount);
         treasuryPreciseBalance += _amount;
@@ -91,16 +98,14 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         emit MintedToTreasury(_amount);
     }
 
-    function teamFunding(uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE){
-       require(_amount > 0, InvalidAmount());
+    function teamFunding(uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) validAmount(_amount) nonReentrant{
        require(_amount <= teamDevelopmentBudget, TeamDevelpomentBudgetExceeded());
-        judgeToken.mint(address(this), _amount);
+        judgeToken.mint(msg.sender, _amount);
     }
 
-    function transferFromTreasury(address _addr, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
-        require(_addr != address(0), InvalidAddress());
+    function transferFromTreasury(address _addr, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) validAddress(_addr) validAmount(_amount) nonReentrant{
+     
         require(_addr != address(this), InputedThisContractAddress());
-        require(_amount > 0, InvalidAmount());
         require(_amount <= judgeToken.balanceOf(address(this)), InsufficientBal());
         judgeToken.safeTransfer(_addr, _amount);
 
@@ -114,11 +119,9 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         return misplacedJudge;
     }
 
-    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
+    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) validAmount(_amount) validAddress(_to) nonReentrant{
         uint256 misplacedJudge = calculateMisplacedJudge();
-        require(_to != address(0), InvalidAddress());
         require(_to != address(this), InputedThisContractAddress());
-        require(_amount > 0, InvalidAmount());
         require(_amount <= misplacedJudge, InvalidAmount());
         require(judgeToken.balanceOf(address(this)) > 0, ContractBalanceNotEnough());
         judgeToken.safeTransfer(_to, _amount);
@@ -126,10 +129,9 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     function recoverERC20(address _strandedTokenAddr, address _addr, uint256 _amount)
         external
-        onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyRole(DEFAULT_ADMIN_ROLE) validAmount(_amount)
     nonReentrant{
         require(_strandedTokenAddr != address(0) && _addr != address(0), InvalidAddress());
-        require(_amount > 0, InvalidAmount());
         require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), ContractBalanceNotEnough());
         require(_strandedTokenAddr != address(judgeToken), RecoveryOfJudgeNA());
         IERC20(_strandedTokenAddr).transfer(_addr, _amount);

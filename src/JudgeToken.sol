@@ -17,17 +17,19 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
 
     event Minted(address indexed caller, address indexed to, uint256 amount);
 
-    error SetJudgeTreasuryAsZeroAddr();
+    error TreasuryPlaceholderAsZeroAddr();
     error AlreadyInitialized();
     error ExceededMaxMintable();
     error InvalidAddress();
+    error TooHigh();
 
     constructor(uint256 initialSupply, address _judgeTreasuryAddress)
         ERC20("JudgeToken", "JUDGE")
         ERC20Capped(500_000_000 * 10 ** decimals())
         ERC20Permit("JudgeToken")
     {
-        require(_judgeTreasuryAddress == address(0), SetJudgeTreasuryAsZeroAddr());
+        require(initialSupply <= 100_000 * 10 ** decimals(), TooHigh());
+        require(_judgeTreasuryAddress == address(0), TreasuryPlaceholderAsZeroAddr());
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, msg.sender);
@@ -50,10 +52,6 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
 
     function setRoleAdmin(bytes32 role, bytes32 adminRole) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setRoleAdmin(role, adminRole);
-    }
-
-    function getTotalSupply() public view returns (uint256) {
-        return _getTotalSupply();
     }
 
     function _update(address from, address to, uint256 value) internal override(ERC20, ERC20Capped, ERC20Votes) {
