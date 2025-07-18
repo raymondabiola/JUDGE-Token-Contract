@@ -19,23 +19,23 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     JudgeTreasury public judgeTreasury;
     IRewardsManager public rewardsManager;
 
-    uint256 private newStakeId;
+    uint64 private newStakeId;
     uint256 public accJudgePerShare;
     uint256 internal rewardsPerQuarter;
     uint256 internal rewardsPerBlock;
     uint256 public lastRewardBlock;
     uint256 public totalCalculatedStakeForReward;
     uint256 public totalStaked;
-    uint256 private constant SCALE = 1e18;
+    uint64 private constant SCALE = 1e18;
     address[] internal users;
-    uint256 private constant maxLockUpPeriod = 360;
-    uint256 public earlyWithdrawPenaltyPercent;
+    uint16 private constant maxLockUpPeriod = 360;
+    uint8 public earlyWithdrawPenaltyPercent;
     uint256 public totalPenalties;
     bool public emergencyFuncCalled;
-    uint256 public constant maxPenaltyPercent = 10;
+    uint8 public constant maxPenaltyPercent = 10;
 
     struct userStake {
-        uint256 id;
+        uint64 id;
         uint256 amountStaked;
         uint32 lockUpPeriod;
         uint256 lockUpRatio;
@@ -47,7 +47,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     mapping(address => userStake[]) internal userStakes;
     mapping(address => bool) internal isUser;
-    bytes32 DEFAULT_ADMIN_ROLE = keccak256("DEFAULT_ADMIN_ROLE");
 
     event RewardsFunded(uint256 amount);
     event Deposited(address indexed user, uint256 amount);
@@ -55,11 +54,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     event EmergencyWithdrawal(
         address indexed admin, address indexed user, uint256 stakeID, uint256 stakeWithdrawn, uint256 rewardPaid
     );
-    event JudgeTokenAddressInitialized(address indexed judgeTokenAddress);
-    event KeyParametersInitialized(address indexed by, address indexed RewardsManager, address indexed JudgeTreasury);
-    event KeyParameterUpdated(address indexed by, address indexed newRewardsManager);
-    event RewardsPerBlockInitialized(uint256 value);
-    event RewardsPerBlockUpdated(uint256 newValue);
+    event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
+    event KeyParametersUpdated(address indexed by, address indexed newRewardsManager);
     event EarlyWithdrawPenaltyPercentInitialized(uint256 newValue);
     event EarlyWithdrawPenaltyPercentUpdated(uint256 newValue);
     event EarlyWithdrawalPenalty(address indexed user, uint256 block, uint256 penalty);
@@ -77,32 +73,20 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     error ZeroStakeBalance();
     error RecoveryOfJudgeNA();
     error ContractBalanceNotEnough();
-    error RewardsMangerAndTreasuryPlaceholderAsZeroAddr();
-    error AlreadyInitialized();
     error InputedThisContractAddress();
     error EOANotAllowed();
 
     constructor(
         address _judgeTokenAddress,
-        address _rewardsManagerAddress,
-        address _judgeTreasuryAddress,
-        uint256 _rewardsPerBlock,
-        uint256 _earlyWithdrawPenaltyPercent
+        uint8 _earlyWithdrawPenaltyPercent
     ) validAddress(_judgeTokenAddress) {
-        require(_rewardsManagerAddress == address(0) && _judgeTreasuryAddress == address(0), RewardsMangerAndTreasuryPlaceholderAsZeroAddr());
-        require(_judgeTokenAddress != address(this), InputedThisContractAddress());
         require(_judgeTokenAddress.code.length > 0, EOANotAllowed());
         require(earlyWithdrawPenaltyPercent <= maxPenaltyPercent, TooHigh());
-
-        rewardsManager = IRewardsManager(_rewardsManagerAddress);
         judgeToken = JudgeToken(_judgeTokenAddress);
-        judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
         newStakeId = 1;
-        rewardsPerBlock = _rewardsPerBlock;
         earlyWithdrawPenaltyPercent = _earlyWithdrawPenaltyPercent;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        emit JudgeTokenAddressInitialized(_judgeTokenAddress);
-        emit RewardsPerBlockInitialized(_rewardsPerBlock);
+        emit JudgeTokenAddressWasSet(_judgeTokenAddress);
         emit EarlyWithdrawPenaltyPercentInitialized(_earlyWithdrawPenaltyPercent);
     }
 
@@ -116,45 +100,34 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
               _;
     }
 
-    modifier validIndex(uint256 _index){
+    modifier validIndex(uint16 _index){
         require(_index < userStakes[msg.sender].length, InvalidIndex());
         _;
     }
 
-    function initializeKeyParameters(address _rewardsManagerAddress, address _judgeTreasuryAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(address(rewardsManager) == address(0) && address(judgeTreasury) == address(0), AlreadyInitialized());
+    function setKeyParameters(address _rewardsManagerAddress, address _judgeTreasuryAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_rewardsManagerAddress != address(0) && _judgeTreasuryAddress != address(0), InvalidAddress());
         require(_rewardsManagerAddress != address(this) && _judgeTreasuryAddress != address(this), InputedThisContractAddress());
         require(_rewardsManagerAddress.code.length > 0 && _judgeTreasuryAddress.code.length > 0, EOANotAllowed());
 
         rewardsManager = IRewardsManager(_rewardsManagerAddress);
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
-        emit KeyParametersInitialized(msg.sender, _rewardsManagerAddress, _judgeTreasuryAddress);
+        emit KeyParametersUpdated(msg.sender, _rewardsManagerAddress);
     }
 
-    function updateKeyParameter(address _rewardsManagerAddress, address _judgeTreasuryAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(_rewardsManagerAddress != address(0) && _judgeTreasuryAddress != address(0), InvalidAddress());
-        require(_rewardsManagerAddress != address(this) && _judgeTreasuryAddress != address(this), InputedThisContractAddress());
-        require(_rewardsManagerAddress.code.length > 0 && _judgeTreasuryAddress.code.length > 0, EOANotAllowed());
-
-        rewardsManager = IRewardsManager(_rewardsManagerAddress);
-        judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
-        emit KeyParameterUpdated(msg.sender, _rewardsManagerAddress);
-    }
-
-    function updateEarlyWithdrawPenaltyPercent(uint256 _earlyWithdrawPenaltyPercent)
+    function updateEarlyWithdrawPenaltyPercent(uint8 _earlyWithdrawPenaltyPercent)
         external validAmount(_earlyWithdrawPenaltyPercent)
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        require(_earlyWithdrawPenaltyPercent <= 10, TooHigh());
+        require(_earlyWithdrawPenaltyPercent <= maxPenaltyPercent, TooHigh());
         earlyWithdrawPenaltyPercent = _earlyWithdrawPenaltyPercent;
         emit EarlyWithdrawPenaltyPercentUpdated(_earlyWithdrawPenaltyPercent);
     }
 
     function updateRewardsPerBlock()public onlyRole(DEFAULT_ADMIN_ROLE)returns(uint256){
-        uint256 numberOfSecondsPerQuarter = 90 days;
-        uint256 sepoliaBlockTime = 12 seconds;
-        uint256 numberOfBlocksPerQuarter = numberOfSecondsPerQuarter / sepoliaBlockTime;
+        uint32 numberOfDaysPerQuarter = 90 days;
+        uint8 sepoliaBlockTime = 12 seconds;
+        uint32 numberOfBlocksPerQuarter = numberOfDaysPerQuarter / sepoliaBlockTime;
         rewardsPerQuarter = judgeTreasury.quarterlyReward();
         rewardsPerBlock = rewardsPerQuarter / numberOfBlocksPerQuarter;
         return rewardsPerBlock;
@@ -173,7 +146,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         lastRewardBlock = block.number;
     }
 
-    function accumulatedStakeRewards(uint256 _index) internal returns(uint256){
+    function accumulatedStakeRewards(uint16 _index) internal view returns(uint256){
          userStake storage stake = userStakes[msg.sender][_index];
         uint256 accRewards = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE;
         return accRewards;
@@ -216,7 +189,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit Deposited(msg.sender, _amount);
     }
 
-    function claimRewards(uint256 _index) external validIndex(_index) nonReentrant{
+    function claimRewards(uint16 _index) external validIndex(_index) nonReentrant{
         userStake storage stake = userStakes[msg.sender][_index];
         require(stake.amountStaked > 0, ZeroStakeBalance());
 
@@ -229,7 +202,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit ClaimedReward(msg.sender, pending);
     }
 
-    function withdraw(uint256 _amount, uint256 _index) external validAmount(_amount) validIndex(_index) nonReentrant {
+    function withdraw(uint256 _amount, uint16 _index) external validAmount(_amount) validIndex(_index) nonReentrant {
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.timestamp >= stake.maturityTimestamp, NotYetMatured());
         require(_amount <= stake.amountStaked, InsufficientBal());
@@ -249,7 +222,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit Withdrawn(msg.sender, _amount);
     }
 
-    function withdrawAll(uint256 _index) external validIndex(_index) nonReentrant {
+    function withdrawAll(uint16 _index) external validIndex(_index) nonReentrant {
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.timestamp >= stake.maturityTimestamp, NotYetMatured());
         updatePool();
@@ -268,7 +241,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit Withdrawn(msg.sender, amountWithdrawn);
     }
 
-    function earlyWithdraw(uint256 _index, uint256 _amount) external validAmount(_amount) validIndex(_index) nonReentrant{
+    function earlyWithdraw(uint16 _index, uint256 _amount) external validAmount(_amount) validIndex(_index) nonReentrant{
 
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.timestamp < stake.maturityTimestamp, AlreadyMatured());
@@ -305,9 +278,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     function emergencyWithdraw() external nonReentrant onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant{
         require(!emergencyFuncCalled, AlreadyTriggered());
         emergencyFuncCalled = true;
-        for (uint256 i; i < users.length; i++) {
+        for (uint32 i; i < users.length; i++) {
             address userAddr = users[i];
-            for (uint256 j; j < userStakes[users[i]].length; j++) {
+            for (uint16 j; j < userStakes[users[i]].length; j++) {
                 userStake storage stake = userStakes[users[i]][j];
 
                 updatePool();
@@ -333,7 +306,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return userStakes[msg.sender];
     }
 
-    function viewMyStakeAtIndex(uint256 _index) external view validIndex(_index) returns (userStake memory) {
+    function viewMyStakeAtIndex(uint16 _index) external view validIndex(_index) returns (userStake memory) {
         return userStakes[msg.sender][_index];
     }
 
@@ -345,7 +318,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return userStakes[addr];
     }
 
-    function viewUserStakeAtIndex(address addr, uint256 _index)
+    function viewUserStakeAtIndex(address addr, uint16 _index)
         external
         view validAddress(addr)
         onlyRole(DEFAULT_ADMIN_ROLE)
@@ -355,7 +328,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return userStakes[addr][_index];
     }
 
-    function viewMyPendingRewards(uint256 _index) external view validIndex(_index) returns (uint256) {
+    function viewMyPendingRewards(uint16 _index) external view validIndex(_index) returns (uint256) {
         userStake memory stake = userStakes[msg.sender][_index];
         uint256 tempAccJudgePerShare = accJudgePerShare;
 

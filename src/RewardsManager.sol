@@ -19,9 +19,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     bytes32 public constant REWARD_DISTRIBUTOR_ROLE = keccak256("REWARD_DISTRIBUTOR_ROLE");
     uint256 public totalRewardsPaid;
 
-    event JudgeTokenAddressInitialized(address indexed judgeTokenAddress);
-    event JudgeTreasuryAddressInitialized(address indexed judgeTreasuryAddress);
-    event JudgeStakingAddressInitialized(address indexed judgeStakingAddress);
+    event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
     event JudgeTreasuryAdressUpdated(address indexed judgeTreasuryAddress);
     event JudgeStakingAddressUpdated(address indexed judgeStakingAddress);
     event RewardDistributorWasSet(address indexed setBy, address indexed newRewardDistributor);
@@ -35,18 +33,12 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     error EOANotAllowed();
     error RecoveryOfJudgeNA();
     error ContractBalanceNotEnough();
-    error TreasuryAndStakingPlaceholderAsZeroAddr();
-    error AlreadyInitialized();
 
-    constructor(address _judgeTokenAddress, address _judgeTreasuryAddress, address _judgeStakingAddress) validAddress(_judgeTokenAddress) nonThisContract(_judgeTokenAddress) {
-        require(
-            _judgeTreasuryAddress == address(0) && _judgeStakingAddress == address(0), TreasuryAndStakingPlaceholderAsZeroAddr()
-        );
+    constructor(address _judgeTokenAddress) validAddress(_judgeTokenAddress){
         require(_judgeTokenAddress.code.length > 0, EOANotAllowed());
         judgeToken = JudgeToken(_judgeTokenAddress);
-        judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
-        judgeStaking = JudgeStaking(_judgeStakingAddress);
-        emit JudgeTokenAddressInitialized(_judgeTokenAddress);
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        emit JudgeTokenAddressWasSet(_judgeTokenAddress);
     }
 
      modifier validAddress(address _to){
@@ -64,27 +56,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
          _;
     }
 
-
-    function initializeKeyParameters(address _judgeTreasuryAddress, address _judgeStakingAddress)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
-        require(address(judgeTreasury) == address(0) && address(judgeStaking) == address(0), AlreadyInitialized());
-        require(_judgeTreasuryAddress != address(0) && _judgeStakingAddress != address(0), InvalidAddress());
-        require(_judgeTreasuryAddress != address(this) && _judgeStakingAddress != address(this), InputedThisContractAddress());
-        require(_judgeTreasuryAddress.code.length > 0 && _judgeStakingAddress.code.length > 0, EOANotAllowed());
-        
-        judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
-        judgeStaking = JudgeStaking(_judgeStakingAddress);
-
-         _grantRole(REWARD_DISTRIBUTOR_ROLE, _judgeStakingAddress);
-
-        emit JudgeTreasuryAddressInitialized(_judgeTreasuryAddress);
-        emit JudgeStakingAddressInitialized(_judgeStakingAddress);
-        emit RewardDistributorWasSet(msg.sender, _judgeStakingAddress);
-    }
-
-    function updateKeyParameters(address _judgeTreasuryAddress, address _judgeStakingAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setKeyParameters(address _judgeTreasuryAddress, address _judgeStakingAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_judgeTreasuryAddress != address(0) && _judgeStakingAddress != address(0), InvalidAddress());
         require(_judgeTreasuryAddress != address(this) && _judgeStakingAddress != address(this), InputedThisContractAddress());
         require(_judgeTreasuryAddress.code.length > 0 && _judgeStakingAddress.code.length > 0, EOANotAllowed());

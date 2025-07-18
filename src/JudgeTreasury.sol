@@ -14,17 +14,18 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     JudgeToken public judgeToken;
     RewardsManager public rewardsManager;
 
-    uint256 decimals = judgeToken.decimals();
 
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     uint256 public stakingRewardsFundsFromTreasury;
     uint256 internal treasuryPreciseBalance;
-    uint256 public quarterlyReward = 1_250_000 * 10 ** decimals;
-    uint256 public immutable totalStakingRewardBudget = 50_000_000 * 10 ** decimals;
-    uint256 public immutable teamDevelopmentBudget = 50_000_000 * 10 ** decimals;
+
+    uint256 decimals;
+    uint256 public quarterlyReward; 
+    uint256 public immutable totalStakingRewardBudget;
+    uint256 public immutable teamDevelopmentBudget; 
 
 
-    event JudgeTokenAddressInitialized(address indexed judgeTokenAddress);
+    event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
     event RewardsManagerAddressInitialized(address indexed rewardsManagerAddress);
     event KeyParameterUpdated(address indexed rewardsManagerAddress);
     event RewardsManagerFunded(uint256 amount);
@@ -37,22 +38,26 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error RecoveryOfJudgeNA();
     error InputedThisContractAddress();
     error ContractBalanceNotEnough();
-    error AlreadyInitialized();
-    error RewardsMangerPlaceholderAsZeroAddr();
     error EOANotAllowed();
     error TotalStakingRewardBudgetExceeded();
     error TeamDevelpomentBudgetExceeded();
     error ExceededMaxMintable();
 
     constructor(address _judgeTokenAddress, address _rewardsManagerAddress) {
-        require(_rewardsManagerAddress == address(0), RewardsMangerPlaceholderAsZeroAddr());
-        require(_judgeTokenAddress != address(0), InvalidAddress());
-        require(_judgeTokenAddress != address(this), InputedThisContractAddress());
-        require(_judgeTokenAddress.code.length > 0, EOANotAllowed());
+        require(_judgeTokenAddress != address(0) && _rewardsManagerAddress != address(0), InvalidAddress());
+        require(_judgeTokenAddress.code.length > 0 && _rewardsManagerAddress.code.length > 0, EOANotAllowed());
         judgeToken = JudgeToken(_judgeTokenAddress);
         rewardsManager = RewardsManager(_rewardsManagerAddress);
 
-        emit JudgeTokenAddressInitialized(_judgeTokenAddress);
+        decimals = judgeToken.decimals();
+        quarterlyReward = 1_250_000 * 10 ** decimals;
+        totalStakingRewardBudget = 50_000_000 * 10 ** decimals;
+        teamDevelopmentBudget = 50_000_000 * 10 ** decimals;
+
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+
+        emit JudgeTokenAddressWasSet(_judgeTokenAddress);
+        emit RewardsManagerAddressInitialized(_rewardsManagerAddress);
     }
 
     modifier validAmount(uint256 _amount){
@@ -63,15 +68,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
      modifier validAddress(address _addr){
               require(_addr != address(0), InvalidAddress());
               _;
-    }
-
-    function initializeKeyParameter(address _rewardsManagerAddress) external validAddress(_rewardsManagerAddress) onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(address(rewardsManager) == address(0), AlreadyInitialized());
-        require(_rewardsManagerAddress != address(this), InputedThisContractAddress());
-        require(_rewardsManagerAddress.code.length > 0, EOANotAllowed());
-        rewardsManager = RewardsManager(_rewardsManagerAddress);
-
-        emit RewardsManagerAddressInitialized(_rewardsManagerAddress);
     }
 
     function updateKeyParameter(address _rewardsManagerAddress) external validAddress(_rewardsManagerAddress) onlyRole(DEFAULT_ADMIN_ROLE) {

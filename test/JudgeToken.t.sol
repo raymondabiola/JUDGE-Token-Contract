@@ -7,9 +7,16 @@ import "../src/JudgeToken.sol";
 import {Checkpoints} from "../lib/openzeppelin-contracts/contracts/utils/structs/Checkpoints.sol";
 import {IAccessControl} from "../lib/openzeppelin-contracts/contracts/access/IAccessControl.sol";
 import {IERC165} from "../lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol";
+import {JudgeTreasury} from "../src/JudgeTreasury.sol";
+import {RewardsManager} from "../src/RewardsManager.sol";
+import {JudgeStaking} from "../src/JudgeStaking.sol";
 
 contract JudgeTokenTest is Test {
     JudgeToken public judgeToken;
+    JudgeTreasury public judgeTreasury;
+    RewardsManager public rewardsManager;
+    JudgeStaking public judgeStaking;
+    
     address public owner;
     address public zeroAddress;
     uint256 pKey = 0x450802246;
@@ -18,7 +25,8 @@ contract JudgeTokenTest is Test {
     address public user2;
     address public user3;
     uint8 decimals = 18;
-    uint256 initialSupply = 1_000_000 * 10 ** uint256(decimals);
+    uint256 initialSupply = 100_000 * 10 ** uint256(decimals);
+    uint8 earlyWithdrawPenaltyPercent = 5;
 
     error AccessControlUnauthorizedAccount(address account, bytes32 neededRole);
     error ERC20InvalidSender(address sender);
@@ -38,6 +46,12 @@ contract JudgeTokenTest is Test {
         user2 = makeAddr("user2");
         user3 = vm.addr(pKey2);
         judgeToken = new JudgeToken(initialSupply);
+        rewardsManager = new RewardsManager(address(judgeToken));
+        judgeTreasury = new JudgeTreasury(address(judgeToken), address(rewardsManager));
+        judgeToken.setJudgeTreasuryAddress(address(judgeTreasury));
+        judgeStaking = new JudgeStaking(address(judgeToken), earlyWithdrawPenaltyPercent);
+        rewardsManager.setKeyParameters(address(judgeTreasury), address(judgeStaking));
+        judgeStaking.setKeyParameters(address(rewardsManager), address(judgeTreasury));
     }
 
     function testName() public {
@@ -53,8 +67,8 @@ contract JudgeTokenTest is Test {
     }
 
     function testCap() public {
-        uint256 cap = 100_000_000 * 10 ** uint256(decimals);
-        uint256 mintAmount = 99_000_001 * 10 ** uint256(decimals);
+        uint256 cap = 500_000_000 * 10 ** uint256(decimals);
+        uint256 mintAmount = 499_900_001 * 10 ** uint256(decimals);
         uint256 increasedSupply = mintAmount + initialSupply;
         assertEq(cap, judgeToken.cap());
         vm.expectRevert(abi.encodeWithSelector(ERC20ExceededCap.selector, increasedSupply, judgeToken.cap()));
@@ -300,7 +314,7 @@ contract JudgeTokenTest is Test {
         }
         judgeToken.mint(user2, amount);
         assertEq(judgeToken.getPastTotalSupply(timePoint1), initialSupply);
-        assertEq(judgeToken.getTotalSupply(), initialSupply + amount);
+        assertEq(judgeToken.totalSupply(), initialSupply + amount);
     }
 
     function testNumCheckpoints() public {
