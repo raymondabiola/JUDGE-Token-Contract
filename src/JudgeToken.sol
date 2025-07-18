@@ -7,20 +7,19 @@ import {ERC20Permit} from "../lib/openzeppelin-contracts/contracts/token/ERC20/e
 import {AccessControl} from "../lib/openzeppelin-contracts/contracts/access/AccessControl.sol";
 import {ERC20Capped} from "../lib/openzeppelin-contracts/contracts/token/ERC20/extensions/ERC20Capped.sol";
 import {ERC20Votes} from "../lib/openzeppelin-contracts/contracts/token/ERC20/extensions/ERC20Votes.sol";
-import {JudgeTreasury} from "./JudgeTreasury.sol";
 import {Nonces} from "../lib/openzeppelin-contracts/contracts/utils/Nonces.sol";
 
 contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessControl, ERC20Capped {
-    JudgeTreasury public judgeTreasury;
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+     uint256 public immutable totalStakingRewardAllocation = 50_000_000 * 10 ** decimals();
+    uint256 public immutable teamDevelopmentAllocation = 50_000_000 * 10 ** decimals(); 
     uint256 public mintableJudgeAmount;
 
     event Minted(address indexed caller, address indexed to, uint256 amount);
-    event JudgeTreasuryAddressUpdated(address indexed by, address indexed JudgeTreasuryAddress);
 
     error TreasuryPlaceholderAsZeroAddr();
     error AlreadyInitialized();
-    error ExceededMaxMintable();
+    error ExceededMintableAmount();
     error InvalidAddress();
     error EOANotAllowed();
     error InputedThisContractAddress();
@@ -35,22 +34,18 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, msg.sender);
         _mint(msg.sender, initialSupply);
+
+        mintableJudgeAmount = cap() - totalStakingRewardAllocation - teamDevelopmentAllocation - initialSupply;
         emit Minted(msg.sender, msg.sender, initialSupply);
     }
 
-    function setJudgeTreasuryAddress(address _judgeTreasuryAddress) external onlyRole(DEFAULT_ADMIN_ROLE){
-        require(_judgeTreasuryAddress != address(0), InvalidAddress());
-         require(_judgeTreasuryAddress.code.length > 0, EOANotAllowed());
-         require(_judgeTreasuryAddress != address(this), InputedThisContractAddress());
-        judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
-        _grantRole(MINTER_ROLE, _judgeTreasuryAddress);
-
-        mintableJudgeAmount = cap() - judgeTreasury.totalStakingRewardBudget() - judgeTreasury.teamDevelopmentBudget();
-        emit JudgeTreasuryAddressUpdated(msg.sender, _judgeTreasuryAddress);
+    function decreaseMintableAmount(uint256 amount)internal{
+        require(amount <= mintableJudgeAmount, ExceededMintableAmount());
+        mintableJudgeAmount -= amount;
     }
 
     function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
-        require(amount <= mintableJudgeAmount, ExceededMaxMintable());
+        decreaseMintableAmount(amount);
         _mint(to, amount);
         emit Minted(msg.sender, to, amount);
     }

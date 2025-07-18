@@ -14,16 +14,13 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     JudgeToken public judgeToken;
     RewardsManager public rewardsManager;
 
-
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     uint256 public stakingRewardsFundsFromTreasury;
+    uint256 public teamFundingReceived;
     uint256 internal treasuryPreciseBalance;
 
     uint256 decimals;
     uint256 public quarterlyReward; 
-    uint256 public immutable totalStakingRewardBudget;
-    uint256 public immutable teamDevelopmentBudget; 
-
 
     event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
     event RewardsManagerAddressInitialized(address indexed rewardsManagerAddress);
@@ -39,9 +36,9 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error InputedThisContractAddress();
     error ContractBalanceNotEnough();
     error EOANotAllowed();
-    error TotalStakingRewardBudgetExceeded();
-    error TeamDevelpomentBudgetExceeded();
-    error ExceededMaxMintable();
+    error TotalStakingRewardAllocationUsed();
+    error TeamDevelpomentAllocationUsed();
+    error RemainingAllocationExceeded();
 
     constructor(address _judgeTokenAddress, address _rewardsManagerAddress) {
         require(_judgeTokenAddress != address(0) && _rewardsManagerAddress != address(0), InvalidAddress());
@@ -51,8 +48,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
         decimals = judgeToken.decimals();
         quarterlyReward = 1_250_000 * 10 ** decimals;
-        totalStakingRewardBudget = 50_000_000 * 10 ** decimals;
-        teamDevelopmentBudget = 50_000_000 * 10 ** decimals;
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
@@ -79,7 +74,8 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     }
 
     function fundRewardsManager() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(stakingRewardsFundsFromTreasury <= totalStakingRewardBudget, TotalStakingRewardBudgetExceeded());
+        require(stakingRewardsFundsFromTreasury < judgeToken.totalStakingRewardAllocation(), TotalStakingRewardAllocationUsed());
+        require(quarterlyReward <= judgeToken.totalStakingRewardAllocation() - stakingRewardsFundsFromTreasury, RemainingAllocationExceeded());
         judgeToken.mint(address(rewardsManager), quarterlyReward);
         stakingRewardsFundsFromTreasury += quarterlyReward;
 
@@ -87,7 +83,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     }
 
     function mintToTreasuryReserve(uint256 _amount) external validAmount(_amount) onlyRole(DEFAULT_ADMIN_ROLE){
-        require(_amount <= judgeToken.mintableJudgeAmount(), ExceededMaxMintable());
         judgeToken.mint(address(this), _amount);
         treasuryPreciseBalance += _amount;
 
@@ -95,8 +90,10 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     }
 
     function teamFunding(uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) validAmount(_amount) nonReentrant{
-       require(_amount <= teamDevelopmentBudget, TeamDevelpomentBudgetExceeded());
+       require(teamFundingReceived < judgeToken.teamDevelopmentAllocation(), TeamDevelpomentAllocationUsed());
+        require(_amount <= judgeToken.teamDevelopmentAllocation() - teamFundingReceived, RemainingAllocationExceeded());
         judgeToken.mint(msg.sender, _amount);
+        teamFundingReceived += _amount;
     }
 
     function transferFromTreasury(address _addr, uint256 _amount) external onlyRole(DEFAULT_ADMIN_ROLE) validAddress(_addr) validAmount(_amount) nonReentrant{
