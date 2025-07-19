@@ -1,4 +1,5 @@
 [profile.default]
+extra_output = ["storageLayout"]
 src = "src"
 out = "out"
 libs = ["lib"]

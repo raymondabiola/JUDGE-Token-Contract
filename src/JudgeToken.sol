@@ -45,6 +45,11 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
         emit Minted(msg.sender, to, amount);
     }
 
+    function mintFromAllocation(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
+        _mint(to, amount);
+        emit Minted(msg.sender, to, amount);
+    }
+
     function setRoleAdmin(bytes32 role, bytes32 adminRole) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setRoleAdmin(role, adminRole);
     }
