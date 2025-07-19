@@ -20,7 +20,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     uint256 public stakingRewardsFundsFromTreasury;
     uint256 public teamFundingReceived;
-    uint256 internal treasuryPreciseBalance;
+    uint256 public treasuryPreciseBalance;
 
     uint8 public decimals;
     uint256 public quarterlyReward; 
@@ -92,7 +92,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         emit MintedToTreasury(_amount);
     }
 
-    function teamFunding(uint256 _amount) external validAmount(_amount) onlyRole(FUND_MANAGER_ROLE) nonReentrant{
+    function fundTeam(address _addr, uint256 _amount) external validAddress(_addr) validAmount(_amount) onlyRole(FUND_MANAGER_ROLE) nonReentrant{
        require(teamFundingReceived < judgeToken.MAX_TEAM_ALLOCATION(), TeamDevelopmentAllocationExceeded());
         require(_amount <= judgeToken.MAX_TEAM_ALLOCATION() - teamFundingReceived, ExceedsRemainingAllocation());
         judgeToken.mintFromAllocation(msg.sender, _amount);

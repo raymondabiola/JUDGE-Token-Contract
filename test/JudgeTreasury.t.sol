@@ -21,11 +21,14 @@ uint256 public initialSupply = 100_000 * 10 ** decimals;
 
 error EOANotAllowed();
 error InvalidAddress();
+error InvalidAmount();
+error InsufficientBalance();
 error CannotInputThisContractAddress();
 error AccessControlUnauthorizedAccount(address account, bytes32 neededRole);
 error TotalStakingRewardAllocationExceeded();
 error ExceedsRemainingAllocation();
 error AmountExceedsMintable();
+error TeamDevelopmentAllocationExceeded();
 
 function setUp() public {
 owner = address(this);
@@ -107,6 +110,7 @@ judgeTreasury.fundRewardsManager();
 function testMintToTreasuryReserve() public{
  bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
  uint256 amount = 2_000_000 * 10 * 10 ** uint256(decimals);
+ uint256 invalidAmount;
  uint assumedMintable = 1_000_000 * 10 * 10 ** uint256(decimals);
 vm.expectRevert(abi.encodeWithSelector(
     AccessControlUnauthorizedAccount.selector,
@@ -116,6 +120,10 @@ vm.expectRevert(abi.encodeWithSelector(
 judgeTreasury.mintToTreasuryReserve(amount);
 
 judgeTreasury.grantRole(fundManager, owner);
+
+vm.expectRevert(InvalidAmount.selector);
+judgeTreasury.mintToTreasuryReserve(invalidAmount);
+
 judgeTreasury.mintToTreasuryReserve(amount);
 assertEq(judgeToken.balanceOf(address(judgeTreasury)), amount);
 
@@ -124,16 +132,96 @@ vm.expectRevert(AmountExceedsMintable.selector);
 judgeTreasury.mintToTreasuryReserve(amount);
 }
 
-function testTeamFunding() public{
+function testFundTeam() public{
+bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
+uint256 amount = 2_000_000 * 10 ** uint256(decimals);
+uint256 invalidAmount;
+uint256 MAX_ALLOCATION = judgeToken.MAX_TEAM_ALLOCATION();
+uint256 assumedTeamFundReceived = 49_000_000 * 10 ** uint256(decimals);
 
+
+vm.expectRevert(abi.encodeWithSelector(
+    AccessControlUnauthorizedAccount.selector,
+    owner,
+    fundManager
+));
+judgeTreasury.fundTeam(owner, amount);
+
+judgeTreasury.grantRole(fundManager, owner);
+vm.expectRevert(InvalidAmount.selector);
+judgeTreasury.fundTeam(owner, invalidAmount);
+
+vm.expectRevert(InvalidAddress.selector);
+judgeTreasury.fundTeam(zeroAddress, amount);
+
+judgeTreasury.fundTeam(owner, amount);
+assertEq(judgeToken.balanceOf(owner), amount + initialSupply);
+
+vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(MAX_ALLOCATION));
+vm.expectRevert(TeamDevelopmentAllocationExceeded.selector);
+judgeTreasury.fundTeam(owner, amount);
+
+vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(assumedTeamFundReceived));
+vm.expectRevert(ExceedsRemainingAllocation.selector);
+judgeTreasury.fundTeam(owner, amount);
 }
 
 function testTransferFromTreasury() public{
+bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
+uint256 amount = 2_000_000 * 10 ** uint256(decimals);
+uint256 amountToTransfer = 1_000_000 * 10 ** uint256(decimals);
+uint256 amountHigherThanTreasuryBalance = 2_000_001 * 10 ** uint256(decimals);
+uint256 invalidAmount;
 
+judgeTreasury.grantRole(fundManager, owner);
+judgeTreasury.mintToTreasuryReserve(amount);
+vm.expectRevert(abi.encodeWithSelector(
+    AccessControlUnauthorizedAccount.selector,
+    user1,
+    fundManager
+));
+vm.prank(user1);
+judgeTreasury.transferFromTreasury(owner, amountToTransfer);
+
+vm.expectRevert(InvalidAmount.selector);
+judgeTreasury.transferFromTreasury(user1, invalidAmount);
+
+vm.expectRevert(InvalidAddress.selector);
+judgeTreasury.transferFromTreasury(zeroAddress, amountToTransfer);
+
+vm.expectRevert(CannotInputThisContractAddress.selector);
+judgeTreasury.transferFromTreasury(address(judgeTreasury), amountToTransfer);
+
+vm.expectRevert(InsufficientBalance.selector);
+judgeTreasury.transferFromTreasury(user1, amountHigherThanTreasuryBalance);
+
+judgeTreasury.transferFromTreasury(user1, amountToTransfer);
+assertEq(judgeToken.balanceOf(user1), amountToTransfer);
+assertEq(judgeTreasury.treasuryPreciseBalance(), amount - amountToTransfer);
 }
 
 function testCalculateMisplacedJudge() public{
+    bytes32 defaultAdmin = judgeTreasury.DEFAULT_ADMIN_ROLE();
+bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
+uint256 amount = 2_000_000 * 10 ** uint256(decimals);
+uint256 amountToTransfer = 500_000 * 10 ** uint256(decimals);
+uint256 misplacedAmount = 200_000 * 10 ** uint256(decimals);
 
+judgeTreasury.grantRole(fundManager, owner);
+judgeTreasury.mintToTreasuryReserve(amount);
+judgeTreasury.transferFromTreasury(user2, amountToTransfer);
+
+vm.prank(user2);
+judgeToken.transfer(address(judgeTreasury), misplacedAmount);
+assertEq(judgeTreasury.calculateMisplacedJudge(), misplacedAmount);
+
+vm.expectRevert(abi.encodeWithSelector(
+    AccessControlUnauthorizedAccount.selector,
+    user2,
+    defaultAdmin
+));
+vm.prank(user2);
+judgeTreasury.calculateMisplacedJudge();
 }
 
 function testRecoverMisplacedJudge() public{
@@ -143,4 +231,5 @@ function testRecoverMisplacedJudge() public{
 function testRecoverERC20() public{
 
 }
+
 }
