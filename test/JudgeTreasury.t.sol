@@ -201,7 +201,7 @@ assertEq(judgeTreasury.treasuryPreciseBalance(), amount - amountToTransfer);
 }
 
 function testCalculateMisplacedJudge() public{
-    bytes32 defaultAdmin = judgeTreasury.DEFAULT_ADMIN_ROLE();
+bytes32 tokenRecoveryAdmin = judgeTreasury.TOKEN_RECOVERY_ROLE();
 bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
 uint256 amount = 2_000_000 * 10 ** uint256(decimals);
 uint256 amountToTransfer = 500_000 * 10 ** uint256(decimals);
@@ -213,19 +213,33 @@ judgeTreasury.transferFromTreasury(user2, amountToTransfer);
 
 vm.prank(user2);
 judgeToken.transfer(address(judgeTreasury), misplacedAmount);
+judgeTreasury.grantRole(tokenRecoveryAdmin, owner);
 assertEq(judgeTreasury.calculateMisplacedJudge(), misplacedAmount);
 
 vm.expectRevert(abi.encodeWithSelector(
     AccessControlUnauthorizedAccount.selector,
     user2,
-    defaultAdmin
+    tokenRecoveryAdmin
 ));
 vm.prank(user2);
 judgeTreasury.calculateMisplacedJudge();
 }
 
 function testRecoverMisplacedJudge() public{
+bytes32 tokenRecoveryAdmin = judgeTreasury.TOKEN_RECOVERY_ROLE();
+bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
+uint256 amount = 2_000_000 * 10 ** uint256(decimals);
+uint256 amountToTransfer = 500_000 * 10 ** uint256(decimals);
+uint256 misplacedAmount = 200_000 * 10 ** uint256(decimals);
 
+judgeTreasury.grantRole(fundManager, owner);
+judgeTreasury.mintToTreasuryReserve(amount);
+judgeTreasury.transferFromTreasury(user2, amountToTransfer);
+
+vm.prank(user2);
+judgeToken.transfer(address(judgeTreasury), misplacedAmount);
+judgeTreasury.recoverMisplacedJudgeToken(zeroAddress, misplacedAmount);
+judgeTreasury.grantRole(tokenRecoveryAdmin, owner);
 }
 
 function testRecoverERC20() public{
