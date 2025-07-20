@@ -10,6 +10,7 @@ import {RewardsManager} from "./RewardsManager.sol";
 
 contract JudgeTreasury is AccessControl, ReentrancyGuard {
     using SafeERC20 for JudgeToken;
+    using SafeERC20 for IERC20;
 
     JudgeToken public judgeToken;
     RewardsManager public rewardsManager;
@@ -22,20 +23,26 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     uint256 public teamFundingReceived;
     uint256 public treasuryPreciseBalance;
     uint8 public feePercent;     //Fee to recover mistakenly sent funds from contract
-    uint8 public constant FEE_PERCENT_THRESHOLD = 30; 
+    uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30; 
     uint256 public judgeRecoveryMinimumThreshold;
 
     uint8 public decimals;
     uint256 public quarterlyReward; 
 
-    mapping(address => uint256) public treasuryFeeBalanceOfStrandedToken;
+    mapping(address => uint256) public feeBalanceOfStrandedToken;
 
     event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
     event RewardsManagerAddressInitialized(address indexed rewardsManagerAddress);
-    event KeyParameterUpdated(address indexed rewardsManagerAddress);
+    event KeyParameterUpdated(address indexed oldRewardsManagerAddress, address indexed newRewardsManagerAddress);
+    event FeePercentUpdated(uint8 oldValue, uint8 newValue);
+    event JudgeRecoveryMinimumThresholdUpdated(uint256 oldValue, uint256 newValue);
     event RewardsManagerFunded(uint256 amount);
+    event TeamDevelopmentWasFunded(address indexed to, uint256 amount);
     event MintedToTreasury(uint256 amount);
     event TransferredFromTreasury(address indexed to, uint256 amount);
+    event Erc20Recovered(address indexed tokenAddress, address indexed to, uint256 refund, uint256 fee);
+    event FeesFromOtherTokensTransferred (address indexed tokenAddress, address indexed to, uint256 feeTransferred, uint256 feeBalanceOfStrandedToken);
+    event JudgeTokenRecovered(address indexed to, uint256 refund, uint256 fee);
 
     error InvalidAmount();
     error InsufficientBalance();
@@ -57,7 +64,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         rewardsManager = RewardsManager(_rewardsManagerAddress);
 
         decimals = judgeToken.decimals();
-        quarterlyReward = 1_250_000 * 10 ** decimals;
+        quarterlyReward = 1_250_000 * 10 ** uint256(decimals);
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
@@ -75,21 +82,26 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
               _;
     }
 
-    function updateKeyParameter(address _rewardsManagerAddress) external validAddress(_rewardsManagerAddress) onlyRole(TREASURY_ADMIN_ROLE) {
-        require(_rewardsManagerAddress != address(this), CannotInputThisContractAddress());
-        require(_rewardsManagerAddress.code.length > 0, EOANotAllowed());
-        rewardsManager = RewardsManager(_rewardsManagerAddress);
+    function updateKeyParameter(address newRewardsManagerAddress) external validAddress(newRewardsManagerAddress) onlyRole(TREASURY_ADMIN_ROLE) {
+        require(newRewardsManagerAddress != address(this), CannotInputThisContractAddress());
+        require(newRewardsManagerAddress.code.length > 0, EOANotAllowed());
+        address oldRewardsManagerAddress = address(rewardsManager);
+        rewardsManager = RewardsManager(newRewardsManagerAddress);
 
-        emit KeyParameterUpdated(_rewardsManagerAddress);
+        emit KeyParameterUpdated(oldRewardsManagerAddress, newRewardsManagerAddress);
     }
 
     function updateFeePercent(uint8 _newFeePercent) external onlyRole(TREASURY_ADMIN_ROLE){
-        require(_newFeePercent < FEE_PERCENT_THRESHOLD, ValueHigherThanThreshold());
+        require(_newFeePercent < FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
+        uint8 oldFeePercent = feePercent;
         feePercent = _newFeePercent;
+        emit FeePercentUpdated(oldFeePercent, _newFeePercent);
     }
 
-    function updateJudgeRecoveryThreshold(uint256 newJudgeRecoveryThreshold) external onlyRole(TREASURY_ADMIN_ROLE){
-        judgeRecoveryMinimumThreshold = newJudgeRecoveryThreshold;
+    function updateJudgeRecoveryMinimumThreshold(uint256 newJudgeRecoveryMinimumThreshold) external onlyRole(TREASURY_ADMIN_ROLE){
+        uint256 oldJudgeRecoveryMinimumThreshold = judgeRecoveryMinimumThreshold;
+        judgeRecoveryMinimumThreshold = newJudgeRecoveryMinimumThreshold;
+        emit JudgeRecoveryMinimumThresholdUpdated(oldJudgeRecoveryMinimumThreshold, newJudgeRecoveryMinimumThreshold);
     }
 
     function fundRewardsManager() external onlyRole(FUND_MANAGER_ROLE) {
@@ -108,11 +120,12 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         emit MintedToTreasury(_amount);
     }
 
-    function fundTeam(address _addr, uint256 _amount) external validAddress(_addr) validAmount(_amount) onlyRole(FUND_MANAGER_ROLE) nonReentrant{
+    function fundTeamDevelopment(address _addr, uint256 _amount) external validAddress(_addr) validAmount(_amount) onlyRole(FUND_MANAGER_ROLE) nonReentrant{
        require(teamFundingReceived < judgeToken.MAX_TEAM_ALLOCATION(), TeamDevelopmentAllocationExceeded());
         require(_amount <= judgeToken.MAX_TEAM_ALLOCATION() - teamFundingReceived, ExceedsRemainingAllocation());
         judgeToken.mintFromAllocation(msg.sender, _amount);
         teamFundingReceived += _amount;
+        emit TeamDevelopmentWasFunded(_addr, _amount);
     }
 
     function transferFromTreasury(address _addr, uint256 _amount) external onlyRole(FUND_MANAGER_ROLE) validAddress(_addr) validAmount(_amount) nonReentrant{
@@ -136,13 +149,14 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         require(_amount <= misplacedJudgeAmount, InvalidAmount());
         require(_amount >= judgeRecoveryMinimumThreshold, NotEnough());
         require(_to != address(this), CannotInputThisContractAddress());
-        uint256 refund = (_amount * uint256(100-feePercent))/100;
+        uint256 refund = (_amount * (100-uint256(feePercent)))/100;
         uint256 fee = _amount - refund;
         treasuryPreciseBalance += fee;
         judgeToken.safeTransfer(_to, refund);
+        emit JudgeTokenRecovered(_to, refund, fee);
     }
 
-    function recoverERC20(address _strandedTokenAddr, address _addr, uint256 _amount)
+    function recoverErc20(address _strandedTokenAddr, address _addr, uint256 _amount)
         external
         onlyRole(TOKEN_RECOVERY_ROLE) validAmount(_amount)
     nonReentrant{
@@ -150,17 +164,19 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), InsufficientContractBalance());
         require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
         require(_addr != address(this), CannotInputThisContractAddress());
-        uint256 refund = (_amount * uint256(100-feePercent))/100;
+        uint256 refund = (_amount * (100-uint256(feePercent)))/100;
         uint256 fee = _amount - refund;
-        treasuryFeeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
-        IERC20(_strandedTokenAddr).transfer(_addr, refund);
+        feeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
+        IERC20(_strandedTokenAddr).safeTransfer(_addr, refund);
+        emit Erc20Recovered(_strandedTokenAddr, _addr, refund, fee);
     }
 
     function transferFeesFromOtherTokensOutOfTreasury(address _strandedTokenAddr, address _to, uint256 _amount)external onlyRole(TREASURY_ADMIN_ROLE) validAmount(_amount) nonReentrant{
         require(_strandedTokenAddr != address(0) && _to != address(0), InvalidAddress());
         require(_to != address(this), CannotInputThisContractAddress());
-        require(treasuryFeeBalanceOfStrandedToken[_strandedTokenAddr] > 0, InsufficientBalance());
-        treasuryFeeBalanceOfStrandedToken[_strandedTokenAddr] -= _amount;
-        IERC20(_strandedTokenAddr).transfer(_to, _amount);
+        require(_amount <= feeBalanceOfStrandedToken[_strandedTokenAddr], InsufficientBalance());
+        feeBalanceOfStrandedToken[_strandedTokenAddr] -= _amount;
+        IERC20(_strandedTokenAddr).safeTransfer(_to, _amount);
+        emit FeesFromOtherTokensTransferred(_strandedTokenAddr, _to, _amount, feeBalanceOfStrandedToken[_strandedTokenAddr]);
     }
 }

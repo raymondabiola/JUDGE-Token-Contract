@@ -17,7 +17,7 @@ address public user2;
 address public user3;
 address public zeroAddress;
 uint8 private decimals = 18;
-uint256 public initialSupply = 100_000 * 10 ** decimals;
+uint256 public initialSupply = 100_000 * 10 ** uint256(decimals);
 
 error EOANotAllowed();
 error InvalidAddress();
@@ -41,7 +41,11 @@ judgeToken = new JudgeToken(initialSupply);
 rewardsManager = new RewardsManager(address(judgeToken));
 judgeTreasury = new JudgeTreasury(address(judgeToken), address(rewardsManager));
 bytes32 minterRole = judgeToken.MINTER_ROLE();
+bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
 judgeToken.grantRole(minterRole, address(judgeTreasury));
+judgeTreasury.grantRole(treasuryAdmin, owner);
+judgeTreasury.updateFeePercent(10);
+judgeTreasury.updateJudgeRecoveryMinimumThreshold(200 * 10 ** uint256(decimals));
 }
 
 function testQuarterlyReward() public{
@@ -81,6 +85,14 @@ judgeTreasury.updateKeyParameter(user2);
 // using judgeToken contract as example for input. Test purposes only
 judgeTreasury.updateKeyParameter(address(judgeToken));
 assertEq(address(judgeTreasury.rewardsManager()), address(judgeToken));
+}
+
+function testUpdateFeePercent()public{
+
+}
+
+function testUpdateJudgeRecoveryMinimumThreshold() public {
+
 }
 
 function testFundRewardsManager() public{
@@ -132,7 +144,7 @@ vm.expectRevert(AmountExceedsMintable.selector);
 judgeTreasury.mintToTreasuryReserve(amount);
 }
 
-function testFundTeam() public{
+function testFundTeamDevelopment() public{
 bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
 uint256 amount = 2_000_000 * 10 ** uint256(decimals);
 uint256 invalidAmount;
@@ -145,25 +157,25 @@ vm.expectRevert(abi.encodeWithSelector(
     owner,
     fundManager
 ));
-judgeTreasury.fundTeam(owner, amount);
+judgeTreasury.fundTeamDevelopment(owner, amount);
 
 judgeTreasury.grantRole(fundManager, owner);
 vm.expectRevert(InvalidAmount.selector);
-judgeTreasury.fundTeam(owner, invalidAmount);
+judgeTreasury.fundTeamDevelopment(owner, invalidAmount);
 
 vm.expectRevert(InvalidAddress.selector);
-judgeTreasury.fundTeam(zeroAddress, amount);
+judgeTreasury.fundTeamDevelopment(zeroAddress, amount);
 
-judgeTreasury.fundTeam(owner, amount);
+judgeTreasury.fundTeamDevelopment(owner, amount);
 assertEq(judgeToken.balanceOf(owner), amount + initialSupply);
 
 vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(MAX_ALLOCATION));
 vm.expectRevert(TeamDevelopmentAllocationExceeded.selector);
-judgeTreasury.fundTeam(owner, amount);
+judgeTreasury.fundTeamDevelopment(owner, amount);
 
 vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(assumedTeamFundReceived));
 vm.expectRevert(ExceedsRemainingAllocation.selector);
-judgeTreasury.fundTeam(owner, amount);
+judgeTreasury.fundTeamDevelopment(owner, amount);
 }
 
 function testTransferFromTreasury() public{
@@ -238,11 +250,26 @@ judgeTreasury.transferFromTreasury(user2, amountToTransfer);
 
 vm.prank(user2);
 judgeToken.transfer(address(judgeTreasury), misplacedAmount);
+vm.expectRevert(
+    abi.encodeWithSelector(
+        AccessControlUnauthorizedAccount.selector,
+        owner,
+        tokenRecoveryAdmin
+    )
+);
 judgeTreasury.recoverMisplacedJudgeToken(zeroAddress, misplacedAmount);
 judgeTreasury.grantRole(tokenRecoveryAdmin, owner);
+uint256 oldBalanceOfUser2 = judgeToken.balanceOf(user2);
+judgeTreasury.recoverMisplacedJudgeToken(user2, misplacedAmount);
+uint256 newBalanceOfUser2 = judgeToken.balanceOf(user2);
+assertEq(newBalanceOfUser2 - oldBalanceOfUser2, misplacedAmount * 90 / 100);
 }
 
-function testRecoverERC20() public{
+function testRecoverErc20() public{
+
+}
+
+function testTransferFeesFromOtherTokensOutOfTreasury()public{
 
 }
 
