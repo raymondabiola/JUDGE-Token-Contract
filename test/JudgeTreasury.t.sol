@@ -6,11 +6,13 @@ import "forge-std/console.sol";
 import "../src/JudgeToken.sol";
 import "../src/JudgeTreasury.sol";
 import "../src/RewardsManager.sol";
+import "../src/SampleERC20.sol";
 
 contract JudgeTreasuryTest is Test{
 JudgeToken public judgeToken;
 JudgeTreasury public judgeTreasury;
 RewardsManager public rewardsManager;
+SampleERC20 public sampleERC20;
 address public owner;
 address public user1;
 address public user2;
@@ -30,6 +32,9 @@ error ExceedsRemainingAllocation();
 error AmountExceedsMintable();
 error TeamDevelopmentAllocationExceeded();
 error NotUpToThreshold();
+error JudgeTokenRecoveryNotAllowed();
+error InsufficientContractBalance();
+error ValueHigherThanThreshold();
 
 function setUp() public {
 owner = address(this);
@@ -47,6 +52,8 @@ judgeToken.grantRole(minterRole, address(judgeTreasury));
 judgeTreasury.grantRole(treasuryAdmin, owner);
 judgeTreasury.updateFeePercent(10);
 judgeTreasury.updateJudgeRecoveryMinimumThreshold(200 * 10 ** uint256(decimals));
+
+sampleERC20 = new SampleERC20();
 }
 
 function testQuarterlyReward() public{
@@ -89,11 +96,37 @@ assertEq(address(judgeTreasury.rewardsManager()), address(judgeToken));
 }
 
 function testUpdateFeePercent()public{
+bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
+uint8 newFeePercent = 15;
+uint8 incorrectFeePercent = 32;
+vm.expectRevert(
+    abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector,
+    user3,
+    treasuryAdmin
+));
+vm.prank(user3);
+judgeTreasury.updateFeePercent(newFeePercent);
 
+vm.expectRevert(ValueHigherThanThreshold.selector);
+judgeTreasury.updateFeePercent(incorrectFeePercent);
+
+judgeTreasury.updateFeePercent(newFeePercent);
+assertEq(judgeTreasury.feePercent(), newFeePercent);
 }
 
 function testUpdateJudgeRecoveryMinimumThreshold() public {
+bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
+uint256 newJudgeRecoveryMinimumThreshold = 1000 * 10 ** uint256(decimals); 
+vm.expectRevert(
+    abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector,
+    user2,
+    treasuryAdmin
+));
+vm.prank(user2);
+judgeTreasury.updateJudgeRecoveryMinimumThreshold(newJudgeRecoveryMinimumThreshold);
 
+judgeTreasury.updateJudgeRecoveryMinimumThreshold(newJudgeRecoveryMinimumThreshold);
+assertEq(judgeTreasury.judgeRecoveryMinimumThreshold(), newJudgeRecoveryMinimumThreshold);
 }
 
 function testFundRewardsManager() public{
@@ -284,11 +317,104 @@ assertEq(judgeTreasury.treasuryPreciseBalance(), amount - amountToTransfer + (mi
 }
 
 function testRecoverErc20() public{
+bytes32 tokenRecoveryAdmin = judgeTreasury.TOKEN_RECOVERY_ROLE();
+address strandedTokenAddr = address(sampleERC20);
+uint256 misplacedAmount = 1000 ether;
+uint256 tooHighAmount = 1001 ether;
+uint256 invalidAmount;
+ sampleERC20.mint(user1, misplacedAmount);
 
+ vm.prank(user1);
+
+ sampleERC20.transfer(address(judgeTreasury), misplacedAmount);
+ assertEq(sampleERC20.balanceOf(address(judgeTreasury)), misplacedAmount);
+
+vm.expectRevert(
+    abi.encodeWithSelector(
+        AccessControlUnauthorizedAccount.selector,
+        owner,
+        tokenRecoveryAdmin
+    )
+);
+judgeTreasury.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
+
+judgeTreasury.grantRole(tokenRecoveryAdmin, owner);
+
+vm.expectRevert(CannotInputThisContractAddress.selector);
+judgeTreasury.recoverErc20(strandedTokenAddr, address(judgeTreasury), misplacedAmount);
+
+vm.expectRevert(InvalidAmount.selector);
+judgeTreasury.recoverErc20(strandedTokenAddr, user1, invalidAmount);
+
+vm.expectRevert(InvalidAddress.selector);
+judgeTreasury.recoverErc20(zeroAddress, user1, misplacedAmount);
+
+vm.expectRevert(InvalidAddress.selector);
+judgeTreasury.recoverErc20(strandedTokenAddr, zeroAddress, misplacedAmount);
+
+vm.expectRevert(InvalidAddress.selector);
+judgeTreasury.recoverErc20(zeroAddress, zeroAddress, misplacedAmount);
+
+vm.expectRevert(InsufficientContractBalance.selector);
+judgeTreasury.recoverErc20(strandedTokenAddr, user1, tooHighAmount);
+
+vm.expectRevert(JudgeTokenRecoveryNotAllowed.selector);
+judgeTreasury.recoverErc20(address(judgeToken), user1, misplacedAmount);
+
+ judgeTreasury.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
+ assertEq(sampleERC20.balanceOf(user1), misplacedAmount * 9/10);
+ assertEq(judgeTreasury.feeBalanceOfStrandedToken(strandedTokenAddr), misplacedAmount * 1/10 );
 }
 
 function testTransferFeesFromOtherTokensOutOfTreasury()public{
+bytes32 tokenRecoveryAdmin = judgeTreasury.TOKEN_RECOVERY_ROLE();
+bytes32 fundManagerRole = judgeTreasury.FUND_MANAGER_ROLE();
+address strandedTokenAddr = address(sampleERC20);
+uint256 misplacedAmount = 1000 ether;
+uint256 tooHighAmount = 1001 ether;
+uint256 invalidAmount;
+sampleERC20.mint(user1, misplacedAmount);
 
+vm.prank(user1);
+sampleERC20.transfer(address(judgeTreasury), misplacedAmount);
+
+judgeTreasury.grantRole(tokenRecoveryAdmin, owner);
+judgeTreasury.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
+
+
+vm.expectRevert(
+    abi.encodeWithSelector(
+    AccessControlUnauthorizedAccount.selector,
+    owner,
+    fundManagerRole)
+);
+judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(strandedTokenAddr, user2, misplacedAmount/10);
+
+judgeTreasury.grantRole(fundManagerRole, owner);
+
+vm.expectRevert(CannotInputThisContractAddress.selector);
+judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(strandedTokenAddr, address(judgeTreasury), misplacedAmount/10);
+
+vm.expectRevert(InvalidAmount.selector);
+judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(strandedTokenAddr, user2, invalidAmount);
+
+vm.expectRevert(InvalidAddress.selector);
+judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(zeroAddress, user2, misplacedAmount/10);
+
+vm.expectRevert(InvalidAddress.selector);
+judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(strandedTokenAddr, zeroAddress, misplacedAmount/10);
+
+vm.expectRevert(InvalidAddress.selector);
+judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(zeroAddress, zeroAddress, misplacedAmount/10);
+
+vm.expectRevert(InsufficientBalance.selector);
+judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(strandedTokenAddr, user2, misplacedAmount*2/10);
+
+vm.expectRevert(JudgeTokenRecoveryNotAllowed.selector);
+judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(address(judgeToken), user2, misplacedAmount/10);
+
+judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(strandedTokenAddr, user2, misplacedAmount/10);
+assertEq(sampleERC20.balanceOf(user2), misplacedAmount/10);
+assertEq(judgeTreasury.feeBalanceOfStrandedToken(strandedTokenAddr), 0);
 }
-
 }

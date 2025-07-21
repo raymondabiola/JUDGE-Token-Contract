@@ -162,8 +162,9 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         notSelf(_addr) validAmount(_amount) onlyRole(TOKEN_RECOVERY_ROLE) 
     nonReentrant{
         require(_strandedTokenAddr != address(0) && _addr != address(0), InvalidAddress());
-        require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), InsufficientContractBalance());
         require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
+        require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), InsufficientContractBalance());
+        
         uint256 refund = (_amount * (100-uint256(feePercent)))/100;
         uint256 fee = _amount - refund;
         feeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
@@ -173,6 +174,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     function transferFeesFromOtherTokensOutOfTreasury(address _strandedTokenAddr, address _to, uint256 _amount)external notSelf(_to) validAmount(_amount) onlyRole(FUND_MANAGER_ROLE) nonReentrant{
         require(_strandedTokenAddr != address(0) && _to != address(0), InvalidAddress());
+        require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
         require(_amount <= feeBalanceOfStrandedToken[_strandedTokenAddr], InsufficientBalance());
         feeBalanceOfStrandedToken[_strandedTokenAddr] -= _amount;
         IERC20(_strandedTokenAddr).safeTransfer(_to, _amount);
