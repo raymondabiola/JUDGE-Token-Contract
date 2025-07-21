@@ -54,7 +54,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error TotalStakingRewardAllocationExceeded();
     error TeamDevelopmentAllocationExceeded();
     error ExceedsRemainingAllocation();
-    error NotEnough();
+    error NotUpToThreshold();
     error ValueHigherThanThreshold();
 
     constructor(address _judgeTokenAddress, address _rewardsManagerAddress) {
@@ -82,8 +82,12 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
               _;
     }
 
-    function updateKeyParameter(address newRewardsManagerAddress) external validAddress(newRewardsManagerAddress) onlyRole(TREASURY_ADMIN_ROLE) {
-        require(newRewardsManagerAddress != address(this), CannotInputThisContractAddress());
+    modifier notSelf(address _addr){
+        require(_addr != address(this), CannotInputThisContractAddress());
+        _;
+    }
+
+    function updateKeyParameter(address newRewardsManagerAddress) external validAddress(newRewardsManagerAddress) notSelf(newRewardsManagerAddress) onlyRole(TREASURY_ADMIN_ROLE) {
         require(newRewardsManagerAddress.code.length > 0, EOANotAllowed());
         address oldRewardsManagerAddress = address(rewardsManager);
         rewardsManager = RewardsManager(newRewardsManagerAddress);
@@ -128,9 +132,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         emit TeamDevelopmentWasFunded(_addr, _amount);
     }
 
-    function transferFromTreasury(address _addr, uint256 _amount) external onlyRole(FUND_MANAGER_ROLE) validAddress(_addr) validAmount(_amount) nonReentrant{
-        
-        require(_addr != address(this), CannotInputThisContractAddress());
+    function transferFromTreasury(address _addr, uint256 _amount) external onlyRole(FUND_MANAGER_ROLE) validAddress(_addr) notSelf(_addr) validAmount(_amount) nonReentrant{
         require(_amount <= treasuryPreciseBalance, InsufficientBalance());
         judgeToken.safeTransfer(_addr, _amount);
 
@@ -144,11 +146,10 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         return misplacedJudgeAmount;
     }
 
-    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external onlyRole(TOKEN_RECOVERY_ROLE) validAmount(_amount) validAddress(_to) nonReentrant{
+    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external onlyRole(TOKEN_RECOVERY_ROLE) validAddress(_to) notSelf(_to) validAmount(_amount) nonReentrant{
         uint256 misplacedJudgeAmount = calculateMisplacedJudge();
         require(_amount <= misplacedJudgeAmount, InvalidAmount());
-        require(_amount >= judgeRecoveryMinimumThreshold, NotEnough());
-        require(_to != address(this), CannotInputThisContractAddress());
+        require(_amount >= judgeRecoveryMinimumThreshold, NotUpToThreshold());
         uint256 refund = (_amount * (100-uint256(feePercent)))/100;
         uint256 fee = _amount - refund;
         treasuryPreciseBalance += fee;
@@ -158,12 +159,11 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     function recoverErc20(address _strandedTokenAddr, address _addr, uint256 _amount)
         external
-        onlyRole(TOKEN_RECOVERY_ROLE) validAmount(_amount)
+        notSelf(_addr) validAmount(_amount) onlyRole(TOKEN_RECOVERY_ROLE) 
     nonReentrant{
         require(_strandedTokenAddr != address(0) && _addr != address(0), InvalidAddress());
         require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), InsufficientContractBalance());
         require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
-        require(_addr != address(this), CannotInputThisContractAddress());
         uint256 refund = (_amount * (100-uint256(feePercent)))/100;
         uint256 fee = _amount - refund;
         feeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
@@ -171,9 +171,8 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         emit Erc20Recovered(_strandedTokenAddr, _addr, refund, fee);
     }
 
-    function transferFeesFromOtherTokensOutOfTreasury(address _strandedTokenAddr, address _to, uint256 _amount)external onlyRole(TREASURY_ADMIN_ROLE) validAmount(_amount) nonReentrant{
+    function transferFeesFromOtherTokensOutOfTreasury(address _strandedTokenAddr, address _to, uint256 _amount)external notSelf(_to) validAmount(_amount) onlyRole(FUND_MANAGER_ROLE) nonReentrant{
         require(_strandedTokenAddr != address(0) && _to != address(0), InvalidAddress());
-        require(_to != address(this), CannotInputThisContractAddress());
         require(_amount <= feeBalanceOfStrandedToken[_strandedTokenAddr], InsufficientBalance());
         feeBalanceOfStrandedToken[_strandedTokenAddr] -= _amount;
         IERC20(_strandedTokenAddr).safeTransfer(_to, _amount);

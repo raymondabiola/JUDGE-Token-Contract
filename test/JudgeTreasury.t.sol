@@ -29,6 +29,7 @@ error TotalStakingRewardAllocationExceeded();
 error ExceedsRemainingAllocation();
 error AmountExceedsMintable();
 error TeamDevelopmentAllocationExceeded();
+error NotUpToThreshold();
 
 function setUp() public {
 owner = address(this);
@@ -243,6 +244,8 @@ bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
 uint256 amount = 2_000_000 * 10 ** uint256(decimals);
 uint256 amountToTransfer = 500_000 * 10 ** uint256(decimals);
 uint256 misplacedAmount = 200_000 * 10 ** uint256(decimals);
+uint256 invalidAmount = 300_000 * 10 ** uint256(decimals);
+uint256 amountLessThanThreshold = 20 * 10 * uint256(decimals);
 
 judgeTreasury.grantRole(fundManager, owner);
 judgeTreasury.mintToTreasuryReserve(amount);
@@ -258,11 +261,26 @@ vm.expectRevert(
     )
 );
 judgeTreasury.recoverMisplacedJudgeToken(zeroAddress, misplacedAmount);
+
 judgeTreasury.grantRole(tokenRecoveryAdmin, owner);
+
+vm.expectRevert(InvalidAmount.selector);
+judgeTreasury.recoverMisplacedJudgeToken(user2, 0);
+
+vm.expectRevert(InvalidAmount.selector);
+judgeTreasury.recoverMisplacedJudgeToken(user2, invalidAmount);
+
+vm.expectRevert(NotUpToThreshold.selector);
+judgeTreasury.recoverMisplacedJudgeToken(user2, amountLessThanThreshold);
+
+vm.expectRevert(CannotInputThisContractAddress.selector);
+judgeTreasury.recoverMisplacedJudgeToken(address(judgeTreasury), misplacedAmount);
+
 uint256 oldBalanceOfUser2 = judgeToken.balanceOf(user2);
 judgeTreasury.recoverMisplacedJudgeToken(user2, misplacedAmount);
 uint256 newBalanceOfUser2 = judgeToken.balanceOf(user2);
 assertEq(newBalanceOfUser2 - oldBalanceOfUser2, misplacedAmount * 90 / 100);
+assertEq(judgeTreasury.treasuryPreciseBalance(), amount - amountToTransfer + (misplacedAmount * 10 / 100));
 }
 
 function testRecoverErc20() public{
