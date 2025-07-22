@@ -7,7 +7,6 @@ import {SafeERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/uti
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {JudgeToken} from "./JudgeToken.sol";
 import {JudgeTreasury} from "./JudgeTreasury.sol";
-import {JudgeStaking} from "./JudgeStaking.sol";
 
 contract RewardsManager is AccessControl, ReentrancyGuard {
     using SafeERC20 for JudgeToken;
@@ -15,10 +14,9 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
 
     JudgeToken public judgeToken;
     JudgeTreasury public judgeTreasury;
-    JudgeStaking public judgeStaking;
 
-    bytes32 public constant REWARD_DISTRIBUTOR_ROLE = keccak256("REWARD_DISTRIBUTOR_ROLE");
-    bytes32 public constant REWARDSMANAGER_ADMIN_ROLE = keccak256("REWARDSMANAGER_ADMIN_ROLE");
+    bytes32 public constant REWARDS_DISTRIBUTOR_ROLE = keccak256("REWARDS_DISTRIBUTOR_ROLE");
+    bytes32 public constant REWARDS_MANAGER_ADMIN_ROLE = keccak256("REWARDS_MANAGER_ADMIN_ROLE");
     bytes32 public constant TOKEN_RECOVERY_ROLE = keccak256("TOKEN_RECOVERY_ROLE");
     bytes32 public constant FUND_MANAGER_ROLE = keccak256("FUND_MANAGER_ROLE");
     bytes32 public constant REWARDS_MANAGER_PRECISE_BALANCE_UPDATER = keccak256("REWARDS_MANAGER_PRECISE_BALANCE_UPDATER");
@@ -33,10 +31,8 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
 
     event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
     event JudgeTreasuryAdressUpdated(address indexed judgeTreasuryAddress);
-    event JudgeStakingAddressUpdated(address indexed judgeStakingAddress);
     event JudgeRecoveryMinimumThresholdUpdated(uint256 oldValue, uint256 newValue);
     event FeePercentUpdated(uint8 oldValue, uint8 newValue);
-    event RewardDistributorWasSet(address indexed setBy, address indexed newRewardDistributor);
     event AdminWithdrawed(address indexed admin, address indexed receiver, uint256 amount);
     event EmergencyWithdrawal(address indexed admin, address indexed receiver, uint256 amount);
     event Erc20Recovered(address indexed tokenAddress, address indexed to, uint256 refund, uint256 fee);
@@ -80,36 +76,29 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         rewardsManagerPreciseBalance += _amount;
     }
 
-    function setKeyParameters(address _judgeTreasuryAddress, address _judgeStakingAddress) external onlyRole(REWARDSMANAGER_ADMIN_ROLE) {
-        require(_judgeTreasuryAddress != address(0) && _judgeStakingAddress != address(0), InvalidAddress());
-        require(_judgeTreasuryAddress != address(this) && _judgeStakingAddress != address(this), CannotInputThisContractAddress());
-        require(_judgeTreasuryAddress.code.length > 0 && _judgeStakingAddress.code.length > 0, EOANotAllowed());
+    function setKeyParameter(address _judgeTreasuryAddress) external validAddress(_judgeTreasuryAddress) notSelf(_judgeTreasuryAddress) onlyRole(REWARDS_MANAGER_ADMIN_ROLE) {
+        require(_judgeTreasuryAddress.code.length > 0, EOANotAllowed());
         
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
-        judgeStaking = JudgeStaking(_judgeStakingAddress);
-
-        _grantRole(REWARD_DISTRIBUTOR_ROLE, _judgeStakingAddress);
 
         emit JudgeTreasuryAdressUpdated(_judgeTreasuryAddress);
-        emit JudgeStakingAddressUpdated(_judgeStakingAddress);
-        emit RewardDistributorWasSet(msg.sender, _judgeStakingAddress);
     }
 
-     function updateFeePercent(uint8 _newFeePercent) external onlyRole(REWARDSMANAGER_ADMIN_ROLE){
+     function updateFeePercent(uint8 _newFeePercent) external onlyRole(REWARDS_MANAGER_ADMIN_ROLE){
         require(_newFeePercent < FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
         uint8 oldFeePercent = feePercent;
         feePercent = _newFeePercent;
         emit FeePercentUpdated(oldFeePercent, _newFeePercent);
     }
 
-    function updateJudgeRecoveryMinimumThreshold(uint256 newJudgeRecoveryMinimumThreshold) external onlyRole(REWARDSMANAGER_ADMIN_ROLE){
+    function updateJudgeRecoveryMinimumThreshold(uint256 newJudgeRecoveryMinimumThreshold) external onlyRole(REWARDS_MANAGER_ADMIN_ROLE){
         uint256 oldJudgeRecoveryMinimumThreshold = judgeRecoveryMinimumThreshold;
         judgeRecoveryMinimumThreshold = newJudgeRecoveryMinimumThreshold;
         emit JudgeRecoveryMinimumThresholdUpdated(oldJudgeRecoveryMinimumThreshold, newJudgeRecoveryMinimumThreshold);
     }
 
-    // Grant the rewards distributor role to the judge staking contact in the deployment script.
-    function sendRewards(address _addr, uint256 _amount) external onlyRole(REWARD_DISTRIBUTOR_ROLE) validAddress(_addr) nonReentrant {
+    // Grant the rewards distributor role to the judge staking contract in the deployment script.
+    function sendRewards(address _addr, uint256 _amount) external onlyRole(REWARDS_DISTRIBUTOR_ROLE) validAddress(_addr) nonReentrant {
         require(_amount <= judgeToken.balanceOf(address(this)), InsufficientContractBalance());
         judgeToken.safeTransfer(_addr, _amount);
         totalRewardsPaid += _amount;
@@ -117,6 +106,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     }
 
     function adminWithdrawal(address _to, uint256 _amount) external validAddress(_to) validAmount(_amount) notSelf(_to) onlyRole(FUND_MANAGER_ROLE) nonReentrant{
+        require(_amount <= rewardsManagerPreciseBalance, InsufficientBalance());
         judgeToken.safeTransfer(_to, _amount);
 
         emit AdminWithdrawed(msg.sender, _to, _amount);

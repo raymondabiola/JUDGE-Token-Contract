@@ -45,6 +45,7 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
         emit Minted(msg.sender, to, amount);
     }
 
+    // Grant the minter role to judgeTreasury
     function mintFromAllocation(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
         _mint(to, amount);
         emit Minted(msg.sender, to, amount);
