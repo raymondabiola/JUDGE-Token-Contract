@@ -18,6 +18,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     bytes32 public constant TREASURY_ADMIN_ROLE = keccak256("TREASURY_ADMIN_ROLE");
     bytes32 public constant FUND_MANAGER_ROLE = keccak256("FUND_MANAGER_ROLE");
     bytes32 public constant TOKEN_RECOVERY_ROLE = keccak256("TOKEN_RECOVERY_ROLE");
+    bytes32 public constant TREASURY_PRECISE_BALANCE_UPDATER = keccak256("TREASURY_PRECISE_BALANCE_UPDATER");
 
     uint256 public stakingRewardsFundsFromTreasury;
     uint256 public teamFundingReceived;
@@ -108,11 +109,17 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         emit JudgeRecoveryMinimumThresholdUpdated(oldJudgeRecoveryMinimumThreshold, newJudgeRecoveryMinimumThreshold);
     }
 
+    // Assign the trasury precise balance updater to JudgeStaking contract and Rewards Manager Contract
+    function increaseTreasuryPreciseBalance(uint256 _amount)external onlyRole(TREASURY_PRECISE_BALANCE_UPDATER){
+        treasuryPreciseBalance += _amount;
+    }
+
     function fundRewardsManager() external onlyRole(FUND_MANAGER_ROLE) {
         require(stakingRewardsFundsFromTreasury < judgeToken.MAX_STAKING_REWARD_ALLOCATION(), TotalStakingRewardAllocationExceeded());
         require(quarterlyReward <= judgeToken.MAX_STAKING_REWARD_ALLOCATION() - stakingRewardsFundsFromTreasury, ExceedsRemainingAllocation());
         judgeToken.mintFromAllocation(address(rewardsManager), quarterlyReward);
         stakingRewardsFundsFromTreasury += quarterlyReward;
+        rewardsManager.increaseRewardsManagerPreciseBalance(quarterlyReward);
 
         emit RewardsManagerFunded(quarterlyReward);
     }
