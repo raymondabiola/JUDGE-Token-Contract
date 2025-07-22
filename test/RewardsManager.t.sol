@@ -29,6 +29,7 @@ contract RewardsManagerTest is Test{
     error ValueHigherThanThreshold();
     error InvalidAmount();
     error InsufficientBalance();
+    error InsufficientContractBalance();
 
     function setUp() public {
     owner = address(this);
@@ -116,7 +117,6 @@ contract RewardsManagerTest is Test{
     }
 
     function testAdminWithdrawal()public{
-    bytes32 rewardsManagerPrecisebalanceUpdater = rewardsManager.REWARDS_MANAGER_PRECISE_BALANCE_UPDATER();
     bytes32 fundManagerAdminTreasury = judgeTreasury.FUND_MANAGER_ROLE();
     bytes32 fundManagerAdminRewardsManager = rewardsManager.FUND_MANAGER_ROLE();
     uint256 misplacedAmount = 100_000 * 10 ** uint256(decimals);
@@ -155,11 +155,53 @@ contract RewardsManagerTest is Test{
     }
 
     function testEmergencyWithdrawal()public{
+    bytes32 fundManagerAdminTreasury = judgeTreasury.FUND_MANAGER_ROLE();
+    bytes32 fundManagerAdminRewardsManager = rewardsManager.FUND_MANAGER_ROLE();
+    vm.expectRevert(
+        abi.encodeWithSelector(
+            AccessControlUnauthorizedAccount.selector,
+            user2,
+            fundManagerAdminRewardsManager
+        )
+    );
+    vm.prank(user2);
+    rewardsManager.emergencyWithdrawal(user1);
+    rewardsManager.grantRole(fundManagerAdminRewardsManager, owner);
+   
+    vm.expectRevert(InsufficientContractBalance.selector);
+    rewardsManager.emergencyWithdrawal(user1);
 
+    judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
+    judgeTreasury.fundRewardsManager();
+
+    vm.expectRevert(InvalidAddress.selector);
+    rewardsManager.emergencyWithdrawal(zeroAddress);
+    vm.expectRevert(CannotInputThisContractAddress.selector);
+    rewardsManager.emergencyWithdrawal(address(rewardsManager));
+    rewardsManager.emergencyWithdrawal(user1);
+    assertEq(judgeToken.balanceOf(user1), 1_250_000 * 10 ** uint256(decimals));
     }
 
     function testCalculateMisplacedJudge()public{
+    bytes32 fundManagerAdminTreasury = judgeTreasury.FUND_MANAGER_ROLE();
+    bytes32 tokenRecoveryAdmin = rewardsManager.TOKEN_RECOVERY_ROLE();
+    uint256 misplacedAmount = 100_000 * 10 ** uint256(decimals);
+    judgeToken.mint(user3, misplacedAmount);
+    vm.prank(user3);
+    judgeToken.transfer(address(rewardsManager), misplacedAmount);
+    judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
+    judgeTreasury.fundRewardsManager();
 
+    vm.expectRevert(
+        abi.encodeWithSelector(
+            AccessControlUnauthorizedAccount.selector,
+            owner,
+            tokenRecoveryAdmin
+        )
+    );
+    rewardsManager.calculateMisplacedJudge();
+    rewardsManager.grantRole(tokenRecoveryAdmin, owner);
+    assertEq(rewardsManager.calculateMisplacedJudge(), misplacedAmount);
     }
 
     function testRecoverMisplacedJudge()public{
