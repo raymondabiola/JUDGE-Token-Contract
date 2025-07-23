@@ -295,24 +295,24 @@ vm.expectRevert(
         tokenRecoveryAdmin
     )
 );
-judgeTreasury.recoverMisplacedJudgeToken(zeroAddress, misplacedAmount);
+judgeTreasury.recoverMisplacedJudge(zeroAddress, misplacedAmount);
 
 judgeTreasury.grantRole(tokenRecoveryAdmin, owner);
 
 vm.expectRevert(InvalidAmount.selector);
-judgeTreasury.recoverMisplacedJudgeToken(user2, 0);
+judgeTreasury.recoverMisplacedJudge(user2, 0);
 
 vm.expectRevert(InvalidAmount.selector);
-judgeTreasury.recoverMisplacedJudgeToken(user2, invalidAmount);
+judgeTreasury.recoverMisplacedJudge(user2, invalidAmount);
 
 vm.expectRevert(NotUpToThreshold.selector);
-judgeTreasury.recoverMisplacedJudgeToken(user2, amountLessThanThreshold);
+judgeTreasury.recoverMisplacedJudge(user2, amountLessThanThreshold);
 
 vm.expectRevert(CannotInputThisContractAddress.selector);
-judgeTreasury.recoverMisplacedJudgeToken(address(judgeTreasury), misplacedAmount);
+judgeTreasury.recoverMisplacedJudge(address(judgeTreasury), misplacedAmount);
 
 uint256 oldBalanceOfUser2 = judgeToken.balanceOf(user2);
-judgeTreasury.recoverMisplacedJudgeToken(user2, misplacedAmount);
+judgeTreasury.recoverMisplacedJudge(user2, misplacedAmount);
 uint256 newBalanceOfUser2 = judgeToken.balanceOf(user2);
 assertEq(newBalanceOfUser2 - oldBalanceOfUser2, misplacedAmount * 90 / 100);
 assertEq(judgeTreasury.treasuryPreciseBalance(), amount - amountToTransfer + (misplacedAmount * 10 / 100));

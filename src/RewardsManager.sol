@@ -125,7 +125,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         return misplacedJudgeAmount;
     }
 
-    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external validAddress(_to) validAmount(_amount) notSelf(_to)  onlyRole(TOKEN_RECOVERY_ROLE) nonReentrant{
+    function recoverMisplacedJudge(address _to, uint256 _amount) external validAddress(_to) validAmount(_amount) notSelf(_to)  onlyRole(TOKEN_RECOVERY_ROLE) nonReentrant{
         uint256 misplacedJudgeAmount = calculateMisplacedJudge();
         require(_amount <= misplacedJudgeAmount, InvalidAmount());
         require(_amount >= judgeRecoveryMinimumThreshold, NotUpToThreshold());
@@ -152,7 +152,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         emit Erc20Recovered(_strandedTokenAddr, _addr, refund, fee);
     }
 
-    function transferFeesFromOtherTokensOutOfTreasury(address _strandedTokenAddr, address _to, uint256 _amount)external notSelf(_to) validAmount(_amount) onlyRole(FUND_MANAGER_ROLE) nonReentrant{
+    function transferFeesFromOtherTokensOutOfRewardsManager(address _strandedTokenAddr, address _to, uint256 _amount)external notSelf(_to) validAmount(_amount) onlyRole(FUND_MANAGER_ROLE) nonReentrant{
         require(_strandedTokenAddr != address(0) && _to != address(0), InvalidAddress());
         require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
         require(_amount <= feeBalanceOfStrandedToken[_strandedTokenAddr], InsufficientBalance());

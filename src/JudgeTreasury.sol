@@ -153,7 +153,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         return misplacedJudgeAmount;
     }
 
-    function recoverMisplacedJudgeToken(address _to, uint256 _amount) external onlyRole(TOKEN_RECOVERY_ROLE) validAddress(_to) notSelf(_to) validAmount(_amount) nonReentrant{
+    function recoverMisplacedJudge(address _to, uint256 _amount) external onlyRole(TOKEN_RECOVERY_ROLE) validAddress(_to) notSelf(_to) validAmount(_amount) nonReentrant{
         uint256 misplacedJudgeAmount = calculateMisplacedJudge();
         require(_amount <= misplacedJudgeAmount, InvalidAmount());
         require(_amount >= judgeRecoveryMinimumThreshold, NotUpToThreshold());

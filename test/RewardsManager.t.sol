@@ -30,6 +30,7 @@ contract RewardsManagerTest is Test{
     error InvalidAmount();
     error InsufficientBalance();
     error InsufficientContractBalance();
+    error JudgeTokenRecoveryNotAllowed();
 
     function setUp() public {
     owner = address(this);
@@ -41,10 +42,15 @@ contract RewardsManagerTest is Test{
     judgeToken = new JudgeToken(initialSupply);
     rewardsManager = new RewardsManager(address(judgeToken));
     judgeTreasury = new JudgeTreasury(address(judgeToken), address(rewardsManager));
+    bytes32 rewardsManagerAdmin = rewardsManager.REWARDS_MANAGER_ADMIN_ROLE();
+    rewardsManager.grantRole(rewardsManagerAdmin, owner);
+    rewardsManager.setKeyParameter(address(judgeTreasury));
     bytes32 minterRole = judgeToken.MINTER_ROLE();
     bytes32 rewardsManagerPrecisebalanceUpdater = rewardsManager.REWARDS_MANAGER_PRECISE_BALANCE_UPDATER();
     rewardsManager.grantRole(rewardsManagerPrecisebalanceUpdater, address(judgeTreasury));
     judgeToken.grantRole(minterRole, address(judgeTreasury));
+    
+    sampleERC20 = new SampleERC20();
     }
 
     function testDeployerIsOwner()public{
@@ -52,17 +58,17 @@ contract RewardsManagerTest is Test{
     assertTrue(rewardsManager.hasRole(defaultAdmin, owner));
     }
 
-    function testSetKeyParameters()public{
+    function testSetKeyParameter()public{
     bytes32 rewardsManagerAdminRole = rewardsManager.REWARDS_MANAGER_ADMIN_ROLE();
     vm.expectRevert(
         abi.encodeWithSelector(
             AccessControlUnauthorizedAccount.selector,
-            owner,
+            user1,
             rewardsManagerAdminRole
         )
     );
+    vm.prank(user1);
     rewardsManager.setKeyParameter(address(judgeTreasury));
-    rewardsManager.grantRole(rewardsManagerAdminRole, owner);
 
     vm.expectRevert(InvalidAddress.selector);
     rewardsManager.setKeyParameter(zeroAddress);
@@ -85,12 +91,12 @@ contract RewardsManagerTest is Test{
     vm.expectRevert(
         abi.encodeWithSelector(
             AccessControlUnauthorizedAccount.selector,
-            owner,
+            user1,
             rewardsManagerAdminRole
         )
     );
+    vm.prank(user1);
     rewardsManager.updateFeePercent(newFeePercent);
-    rewardsManager.grantRole(rewardsManagerAdminRole, owner);
 
     vm.expectRevert(ValueHigherThanThreshold.selector);
     rewardsManager.updateFeePercent(feePercentHigherThanThreshold);
@@ -105,12 +111,12 @@ contract RewardsManagerTest is Test{
     vm.expectRevert(
         abi.encodeWithSelector(
             AccessControlUnauthorizedAccount.selector,
-            owner,
+            user1,
             rewardsManagerAdminRole
         )
     );
+    vm.prank(user1);
     rewardsManager.updateJudgeRecoveryMinimumThreshold(newJudgeRecoveryMinimumThreshold);
-    rewardsManager.grantRole(rewardsManagerAdminRole, owner);
 
     rewardsManager.updateJudgeRecoveryMinimumThreshold(newJudgeRecoveryMinimumThreshold);
     assertEq(rewardsManager.judgeRecoveryMinimumThreshold(), newJudgeRecoveryMinimumThreshold);
@@ -204,15 +210,153 @@ contract RewardsManagerTest is Test{
     assertEq(rewardsManager.calculateMisplacedJudge(), misplacedAmount);
     }
 
-    function testRecoverMisplacedJudge()public{
+    function testRecoverMisplacedJudgeToken()public{
+    bytes32 fundManagerAdminTreasury = judgeTreasury.FUND_MANAGER_ROLE();
+    bytes32 rewardsManagerAdmin = rewardsManager.REWARDS_MANAGER_ADMIN_ROLE();
+    bytes32 tokenRecoveryAdmin = rewardsManager.TOKEN_RECOVERY_ROLE();
+    bytes32 treasuryPreciseBalanceUpdater = judgeTreasury.TREASURY_PRECISE_BALANCE_UPDATER();
+    judgeTreasury.grantRole(treasuryPreciseBalanceUpdater, address(rewardsManager));
+    uint256 misplacedAmount = 100_000 * 10 ** uint256(decimals);
+    uint256 invalidAmount;
+    uint8 feePercent = 10;
+    rewardsManager.grantRole(rewardsManagerAdmin, owner);
+    rewardsManager.updateFeePercent(feePercent);
+    judgeToken.mint(user3, misplacedAmount);
+    vm.prank(user3);
+    judgeToken.transfer(address(rewardsManager), misplacedAmount);
+    judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
+    judgeTreasury.fundRewardsManager();
 
+    vm.expectRevert(
+        abi.encodeWithSelector(
+            AccessControlUnauthorizedAccount.selector,
+            owner,
+            tokenRecoveryAdmin
+        )
+    );
+    rewardsManager.recoverMisplacedJudge(user3, misplacedAmount);
+    rewardsManager.grantRole(tokenRecoveryAdmin, owner);
+
+    vm.expectRevert(InvalidAddress.selector);
+    rewardsManager.recoverMisplacedJudge(zeroAddress, misplacedAmount);
+
+    vm.expectRevert(CannotInputThisContractAddress.selector);
+    rewardsManager.recoverMisplacedJudge(address(rewardsManager), misplacedAmount);
+
+    vm.expectRevert(InvalidAmount.selector);
+    rewardsManager.recoverMisplacedJudge(user3, invalidAmount);
+
+    rewardsManager.recoverMisplacedJudge(user3, misplacedAmount);
+    assertEq(judgeToken.balanceOf(user3), misplacedAmount * 9 / 10);
+    assertEq(judgeToken.balanceOf(address(judgeTreasury)), misplacedAmount / 10);
     }
 
     function testRecoverErc20()public{
+    bytes32 tokenRecoveryAdmin = rewardsManager.TOKEN_RECOVERY_ROLE();
+    bytes32 rewardsManagerAdmin = rewardsManager.REWARDS_MANAGER_ADMIN_ROLE();
+    address strandedTokenAddr = address(sampleERC20);
+    uint256 misplacedAmount = 1000 ether;
+    uint256 tooHighAmount = 1001 ether;
+    uint256 invalidAmount;
+    uint8 feePercent = 10;
+    rewardsManager.grantRole(rewardsManagerAdmin, owner);
+    rewardsManager.updateFeePercent(feePercent);
+    sampleERC20.mint(user1, misplacedAmount);
 
+    vm.prank(user1);
+
+    sampleERC20.transfer(address(rewardsManager), misplacedAmount);
+    assertEq(sampleERC20.balanceOf(address(rewardsManager)), misplacedAmount);
+
+    vm.expectRevert(
+        abi.encodeWithSelector(
+            AccessControlUnauthorizedAccount.selector,
+            owner,
+            tokenRecoveryAdmin
+        )
+    );
+    rewardsManager.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
+
+    rewardsManager.grantRole(tokenRecoveryAdmin, owner);
+
+    vm.expectRevert(CannotInputThisContractAddress.selector);
+    rewardsManager.recoverErc20(strandedTokenAddr, address(rewardsManager), misplacedAmount);
+
+    vm.expectRevert(InvalidAmount.selector);
+    rewardsManager.recoverErc20(strandedTokenAddr, user1, invalidAmount);
+
+    vm.expectRevert(InvalidAddress.selector);
+    rewardsManager.recoverErc20(zeroAddress, user1, misplacedAmount);
+
+    vm.expectRevert(InvalidAddress.selector);
+    rewardsManager.recoverErc20(strandedTokenAddr, zeroAddress, misplacedAmount);
+
+    vm.expectRevert(InvalidAddress.selector);
+    rewardsManager.recoverErc20(zeroAddress, zeroAddress, misplacedAmount);
+
+    vm.expectRevert(InsufficientContractBalance.selector);
+    rewardsManager.recoverErc20(strandedTokenAddr, user1, tooHighAmount);
+
+    vm.expectRevert(JudgeTokenRecoveryNotAllowed.selector);
+    rewardsManager.recoverErc20(address(judgeToken), user1, misplacedAmount);
+
+    rewardsManager.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
+    assertEq(sampleERC20.balanceOf(user1), misplacedAmount * 9/10);
+    assertEq(rewardsManager.feeBalanceOfStrandedToken(strandedTokenAddr), misplacedAmount /10 );
     }
 
-    function testTransferFeesFromOtherTokensOutOfTreasury()public {
+    function testTransferFeesFromOtherTokensOutOfRewardsManager()public {
+        bytes32 tokenRecoveryAdmin = rewardsManager.TOKEN_RECOVERY_ROLE();
+        bytes32 rewardsManagerAdmin = rewardsManager.REWARDS_MANAGER_ADMIN_ROLE();
+        bytes32 fundManagerRole = rewardsManager.FUND_MANAGER_ROLE();
+        address strandedTokenAddr = address(sampleERC20);
+        uint256 misplacedAmount = 1000 ether;
+        uint256 invalidAmount;
+        uint8 feePercent = 10;
+        rewardsManager.grantRole(rewardsManagerAdmin, owner);
+        rewardsManager.updateFeePercent(feePercent);
+        sampleERC20.mint(user1, misplacedAmount);
 
-    }
+        vm.prank(user1);
+        sampleERC20.transfer(address(rewardsManager), misplacedAmount);
+
+        rewardsManager.grantRole(tokenRecoveryAdmin, owner);
+        rewardsManager.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
+
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+            AccessControlUnauthorizedAccount.selector,
+            owner,
+            fundManagerRole)
+        );
+        rewardsManager.transferFeesFromOtherTokensOutOfRewardsManager(strandedTokenAddr, user2, misplacedAmount/10);
+
+        rewardsManager.grantRole(fundManagerRole, owner);
+
+        vm.expectRevert(CannotInputThisContractAddress.selector);
+        rewardsManager.transferFeesFromOtherTokensOutOfRewardsManager(strandedTokenAddr, address(rewardsManager), misplacedAmount/10);
+
+        vm.expectRevert(InvalidAmount.selector);
+        rewardsManager.transferFeesFromOtherTokensOutOfRewardsManager(strandedTokenAddr, user2, invalidAmount);
+
+        vm.expectRevert(InvalidAddress.selector);
+        rewardsManager.transferFeesFromOtherTokensOutOfRewardsManager(zeroAddress, user2, misplacedAmount/10);
+
+        vm.expectRevert(InvalidAddress.selector);
+        rewardsManager.transferFeesFromOtherTokensOutOfRewardsManager(strandedTokenAddr, zeroAddress, misplacedAmount/10);
+
+        vm.expectRevert(InvalidAddress.selector);
+        rewardsManager.transferFeesFromOtherTokensOutOfRewardsManager(zeroAddress, zeroAddress, misplacedAmount/10);
+
+        vm.expectRevert(InsufficientBalance.selector);
+        rewardsManager.transferFeesFromOtherTokensOutOfRewardsManager(strandedTokenAddr, user2, misplacedAmount*2/10);
+
+        vm.expectRevert(JudgeTokenRecoveryNotAllowed.selector);
+        rewardsManager.transferFeesFromOtherTokensOutOfRewardsManager(address(judgeToken), user2, misplacedAmount/10);
+
+        rewardsManager.transferFeesFromOtherTokensOutOfRewardsManager(strandedTokenAddr, user2, misplacedAmount/10);
+        assertEq(sampleERC20.balanceOf(user2), misplacedAmount/10);
+        assertEq(rewardsManager.feeBalanceOfStrandedToken(strandedTokenAddr), 0);
+        }
 }
