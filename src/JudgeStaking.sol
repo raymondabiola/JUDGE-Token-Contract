@@ -36,7 +36,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint8 public earlyWithdrawPenaltyPercent;
     uint256 public totalPenalties;
     bool public emergencyFuncCalled;
-    uint8 public constant maxPenaltyPercent = 10;
+    uint8 public constant maxPenaltyPercent = 20;
     uint8 public feePercent;
     uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30; 
     uint256 public judgeRecoveryMinimumThreshold;
