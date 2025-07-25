@@ -7,6 +7,7 @@ import {ReentrancyGuard} from "../lib/openzeppelin-contracts/contracts/utils/Ree
 import {SafeERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {RewardsManager} from "./RewardsManager.sol";
+import {JudgeStaking} from "./JudgeStaking.sol";
 
 contract JudgeTreasury is AccessControl, ReentrancyGuard {
     using SafeERC20 for JudgeToken;
@@ -14,6 +15,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     JudgeToken public judgeToken;
     RewardsManager public rewardsManager;
+    JudgeStaking public judgeStaking;
 
     bytes32 public constant TREASURY_ADMIN_ROLE = keccak256("TREASURY_ADMIN_ROLE");
     bytes32 public constant FUND_MANAGER_ROLE = keccak256("FUND_MANAGER_ROLE");
@@ -26,10 +28,15 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     uint8 public feePercent;     //Fee to recover mistakenly sent funds from contract
     uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30; 
     uint256 public judgeRecoveryMinimumThreshold;
+    uint256 public immutable MIN_QUARTERLY_REWARD_ALLOCATION;
+    uint256 public immutable MAX_QUARTERLY_REWARD_ALLOCATION;
 
     uint8 public decimals;
-    uint256 public quarterlyReward; 
-
+    uint256 quarterIndex;
+    
+    mapping(uint256 => bool) public setQuarterlyRewardsAtIndexWasPaidToRewardsManager;
+    mapping(uint256 => uint256)public quarterlyRewards; //mapping of base quarterly rewards;
+    mapping(uint256 => uint256) public additionalQuarterRewards; //mapping of additional rewards
     mapping(address => uint256) public feeBalanceOfStrandedToken;
 
     event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
@@ -58,14 +65,17 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error NotUpToThreshold();
     error ValueHigherThanThreshold();
 
-    constructor(address _judgeTokenAddress, address _rewardsManagerAddress) {
+    constructor(address _judgeTokenAddress, address _rewardsManagerAddress, address _judgeStakingAddress) {
         require(_judgeTokenAddress != address(0) && _rewardsManagerAddress != address(0), InvalidAddress());
         require(_judgeTokenAddress.code.length > 0 && _rewardsManagerAddress.code.length > 0, EOANotAllowed());
         judgeToken = JudgeToken(_judgeTokenAddress);
         rewardsManager = RewardsManager(_rewardsManagerAddress);
-
+        judgeStaking = JudgeStaking(_judgeStakingAddress);
+        
+        quarterIndex = 1;
         decimals = judgeToken.decimals();
-        quarterlyReward = 1_250_000 * 10 ** uint256(decimals);
+        MIN_QUARTERLY_REWARD_ALLOCATION = 416_666 * 10 ** uint256(decimals);
+        MAX_QUARTERLY_REWARD_ALLOCATION = 1_250_000 * 10 ** uint256(decimals);
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
@@ -88,14 +98,32 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         _;
     }
 
-    function updateKeyParameter(address newRewardsManagerAddress) external validAddress(newRewardsManagerAddress) notSelf(newRewardsManagerAddress) onlyRole(TREASURY_ADMIN_ROLE) {
+    function updateKeyParameters(address newRewardsManagerAddress, address _judgeStakingAddress) external validAddress(newRewardsManagerAddress) notSelf(newRewardsManagerAddress) onlyRole(TREASURY_ADMIN_ROLE) {
         require(newRewardsManagerAddress.code.length > 0, EOANotAllowed());
         address oldRewardsManagerAddress = address(rewardsManager);
         rewardsManager = RewardsManager(newRewardsManagerAddress);
+        judgeStaking = JudgeStaking(_judgeStakingAddress);
 
         emit KeyParameterUpdated(oldRewardsManagerAddress, newRewardsManagerAddress);
     }
 
+    function setNewQuarterlyRewards(uint256 _reward)public onlyRole(TREASURY_ADMIN_ROLE){
+        require(_reward != 0, InvalidAmount());
+        require(_reward >= MIN_QUARTERLY_REWARD_ALLOCATION && _reward <= MAX_QUARTERLY_REWARD_ALLOCATION, OutOfRange());
+    quarterlyRewards[quarterIndex] = _reward;
+    quarterIndex += 1;
+    }
+
+    function addToQuarterReward(address _from, uint256 _reward)public onlyRole(TREASURY_ADMIN_ROLE){
+       require(_from != address(0), InvalidAddress());
+        require(_reward != 0, InvalidAmount());
+        uint256 currentQuarterIndex = judgeStaking.getCurrentQuarterIndex();
+    require(setQuarterlyRewardsAtIndexWasPaidToRewardsManager[currentQuarterIndex], rewardsFromAllocationNotYetpaid());
+        additionalQuarterRewards[currentQuarterIndex] += _reward;
+        judgeToken.SafeTransferFrom(_from, address(rewardsManager), _reward);
+        rewardsManager.increaseRewardsManagerPreciseBalance(_reward);
+
+    }
     function updateFeePercent(uint8 _newFeePercent) external onlyRole(TREASURY_ADMIN_ROLE){
         require(_newFeePercent < FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
         uint8 oldFeePercent = feePercent;
@@ -114,14 +142,15 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         treasuryPreciseBalance += _amount;
     }
 
-    function fundRewardsManager() external onlyRole(FUND_MANAGER_ROLE) {
+    function fundRewardsManager(uint256 _index) external onlyRole(FUND_MANAGER_ROLE) {
         require(stakingRewardsFundsFromTreasury < judgeToken.MAX_STAKING_REWARD_ALLOCATION(), TotalStakingRewardAllocationExceeded());
-        require(quarterlyReward <= judgeToken.MAX_STAKING_REWARD_ALLOCATION() - stakingRewardsFundsFromTreasury, ExceedsRemainingAllocation());
-        judgeToken.mintFromAllocation(address(rewardsManager), quarterlyReward);
-        stakingRewardsFundsFromTreasury += quarterlyReward;
-        rewardsManager.increaseRewardsManagerPreciseBalance(quarterlyReward);
+        require(quarterlyRewards[_index] <= judgeToken.MAX_STAKING_REWARD_ALLOCATION() - stakingRewardsFundsFromTreasury, ExceedsRemainingAllocation());
+        judgeToken.mintFromAllocation(address(rewardsManager), quarterlyRewards[_index]);
+        stakingRewardsFundsFromTreasury += quarterlyRewards[_index];
+        rewardsManager.increaseRewardsManagerPreciseBalance(quarterlyRewards[_index]);
+        setQuarterlyRewardsAtIndexWasPaidToRewardsManager[_index] = true;
 
-        emit RewardsManagerFunded(quarterlyReward);
+        emit RewardsManagerFunded(quarterlyRewards[_index]);
     }
 
     function mintToTreasuryReserve(uint256 _amount) external validAmount(_amount) onlyRole(FUND_MANAGER_ROLE){
