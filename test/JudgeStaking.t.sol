@@ -45,7 +45,7 @@ function setUp()public{
     judgeToken = new JudgeToken(initialSupply);
     judgeStaking = new JudgeStaking(address(judgeToken), earlyWithdrawalPercent);
     rewardsManager = new RewardsManager(address(judgeToken));
-    judgeTreasury = new JudgeTreasury(address(judgeToken), address(rewardsManager));
+    judgeTreasury = new JudgeTreasury(address(judgeToken), address(rewardsManager), address(judgeStaking));
     sampleERC20 = new SampleERC20();
     
     bytes32 minterRole = judgeToken.MINTER_ROLE();
@@ -140,8 +140,16 @@ judgeStaking.updateEarlyWithdrawPenaltyPercent(newEarlyWithdrawalPercent);
 assertEq(judgeStaking.earlyWithdrawPenaltyPercent(), 5);
 }
 
+function getCurrentQuarterIndex()public{
+
+}
+
 function testCalculateRewardsPerBlock()public{
 
+}
+
+function testGetCurrentAPR()public{
+    
 }
 
 function testUpdateFeePercent()public{

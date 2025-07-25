@@ -6,12 +6,14 @@ import "forge-std/console.sol";
 import "../src/JudgeToken.sol";
 import "../src/JudgeTreasury.sol";
 import "../src/RewardsManager.sol";
+import "../src/JudgeStaking.sol";
 import "../src/SampleERC20.sol";
 
 contract JudgeTreasuryTest is Test{
 JudgeToken public judgeToken;
 JudgeTreasury public judgeTreasury;
 RewardsManager public rewardsManager;
+JudgeStaking public judgeStaking;
 SampleERC20 public sampleERC20;
 address public owner;
 address public user1;
@@ -20,6 +22,7 @@ address public user3;
 address public zeroAddress;
 uint8 private decimals = 18;
 uint256 public initialSupply = 100_000 * 10 ** uint256(decimals);
+uint8 public earlyWithdrawalPercent = 10;
 
 error EOANotAllowed();
 error InvalidAddress();
@@ -45,7 +48,8 @@ zeroAddress = address(0);
 
 judgeToken = new JudgeToken(initialSupply);
 rewardsManager = new RewardsManager(address(judgeToken));
-judgeTreasury = new JudgeTreasury(address(judgeToken), address(rewardsManager));
+judgeStaking = new JudgeStaking(address(judgeToken), earlyWithdrawalPercent);
+judgeTreasury = new JudgeTreasury(address(judgeToken), address(rewardsManager), address(judgeStaking));
 bytes32 minterRole = judgeToken.MINTER_ROLE();
 bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
 bytes32 rewardsManagerPreciseBalanceUpdater = rewardsManager.REWARDS_MANAGER_PRECISE_BALANCE_UPDATER();
@@ -58,11 +62,6 @@ judgeTreasury.updateJudgeRecoveryMinimumThreshold(200 * 10 ** uint256(decimals))
 sampleERC20 = new SampleERC20();
 }
 
-function testQuarterlyReward() public{
-    uint256 expectedQuarterlyReward = 1_250_000 * 10 ** uint256(decimals);
-assertEq(judgeTreasury.quarterlyReward(), expectedQuarterlyReward);
-}
-
 function testDecimals() public{
 assertEq(judgeTreasury.decimals(), decimals);
 }
@@ -72,17 +71,36 @@ bytes32 defaultAdmin = judgeTreasury.DEFAULT_ADMIN_ROLE();
 assertTrue(judgeTreasury.hasRole(defaultAdmin, owner));
 }
 
-function testUpdateKeyParameter() public{
+function testUpdateKeyParameters() public{
     bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
     judgeTreasury.grantRole(treasuryAdmin, owner);
+
     vm.expectRevert(EOANotAllowed.selector);
-judgeTreasury.updateKeyParameter(user1);
+judgeTreasury.updateKeyParameters(user1, address(judgeToken));
+
+ vm.expectRevert(EOANotAllowed.selector);
+ judgeTreasury.updateKeyParameters(address(judgeToken), user1);
+
+  vm.expectRevert(EOANotAllowed.selector);
+ judgeTreasury.updateKeyParameters(user2, user1);
 
 vm.expectRevert(InvalidAddress.selector);
-judgeTreasury.updateKeyParameter(zeroAddress);
+judgeTreasury.updateKeyParameters(zeroAddress, address(judgeToken));
+
+vm.expectRevert(InvalidAddress.selector);
+judgeTreasury.updateKeyParameters(address(judgeToken), zeroAddress);
+
+vm.expectRevert(InvalidAddress.selector);
+judgeTreasury.updateKeyParameters(zeroAddress, zeroAddress);
 
 vm.expectRevert(CannotInputThisContractAddress.selector);
-judgeTreasury.updateKeyParameter(address(judgeTreasury));
+judgeTreasury.updateKeyParameters(address(judgeTreasury), address(judgeToken));
+
+vm.expectRevert(CannotInputThisContractAddress.selector);
+judgeTreasury.updateKeyParameters(address(judgeToken), address(judgeTreasury));
+
+vm.expectRevert(CannotInputThisContractAddress.selector);
+judgeTreasury.updateKeyParameters(address(judgeTreasury), address(judgeTreasury));
 
 vm.expectRevert(
     abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector,
@@ -90,11 +108,20 @@ vm.expectRevert(
     treasuryAdmin)
 );
 vm.prank(user1);
-judgeTreasury.updateKeyParameter(user2);
+judgeTreasury.updateKeyParameters(address(judgeToken), address(judgeToken));
 
 // using judgeToken contract as example for input. Test purposes only
-judgeTreasury.updateKeyParameter(address(judgeToken));
+judgeTreasury.updateKeyParameters(address(judgeToken), address(judgeToken));
 assertEq(address(judgeTreasury.rewardsManager()), address(judgeToken));
+assertEq(address(judgeTreasury.judgeStaking()), address(judgeToken));
+}
+
+function testSetNewQuarterlyRewards()public{
+
+}
+
+function testAddToQuarterReward()public{
+    
 }
 
 function testUpdateFeePercent()public{
@@ -132,27 +159,31 @@ assertEq(judgeTreasury.judgeRecoveryMinimumThreshold(), newJudgeRecoveryMinimumT
 }
 
 function testFundRewardsManager() public{
+    uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
     uint256 MAX_ALLOCATION = judgeToken.MAX_STAKING_REWARD_ALLOCATION();
-    uint256 newStakingRewardsFundFromTreasury = 49_000_000 * 10 ** uint256(decimals);
+    uint256 newStakingRewardsFundFromTreasury = 49_000_001 * 10 ** uint256(decimals);
     bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
+    uint256 index = 1;
+
+judgeTreasury.setNewQuarterlyRewards(rewards);
 vm.expectRevert(abi.encodeWithSelector(
     AccessControlUnauthorizedAccount.selector,
     owner,
     fundManager
 ));
-judgeTreasury.fundRewardsManager();
+judgeTreasury.fundRewardsManager(index);
 
 judgeTreasury.grantRole(fundManager, owner);
-judgeTreasury.fundRewardsManager();
-assertEq(judgeTreasury.stakingRewardsFundsFromTreasury(), judgeTreasury.quarterlyReward());
+judgeTreasury.fundRewardsManager(index);
+assertEq(judgeTreasury.stakingRewardsFundsFromTreasury(), judgeTreasury.quarterlyRewards(index));
 
-vm.store(address(judgeTreasury), bytes32(uint256(4)), bytes32(MAX_ALLOCATION));
+vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(MAX_ALLOCATION));
 vm.expectRevert(TotalStakingRewardAllocationExceeded.selector);
-judgeTreasury.fundRewardsManager();
+judgeTreasury.fundRewardsManager(index);
 
-vm.store(address(judgeTreasury), bytes32(uint256(4)), bytes32(newStakingRewardsFundFromTreasury));
+vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(newStakingRewardsFundFromTreasury));
 vm.expectRevert(ExceedsRemainingAllocation.selector);
-judgeTreasury.fundRewardsManager();
+judgeTreasury.fundRewardsManager(index);
 }
 
 function testMintToTreasuryReserve() public{
@@ -205,11 +236,11 @@ judgeTreasury.fundTeamDevelopment(zeroAddress, amount);
 judgeTreasury.fundTeamDevelopment(owner, amount);
 assertEq(judgeToken.balanceOf(owner), amount + initialSupply);
 
-vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(MAX_ALLOCATION));
+vm.store(address(judgeTreasury), bytes32(uint256(6)), bytes32(MAX_ALLOCATION));
 vm.expectRevert(TeamDevelopmentAllocationExceeded.selector);
 judgeTreasury.fundTeamDevelopment(owner, amount);
 
-vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(assumedTeamFundReceived));
+vm.store(address(judgeTreasury), bytes32(uint256(6)), bytes32(assumedTeamFundReceived));
 vm.expectRevert(ExceedsRemainingAllocation.selector);
 judgeTreasury.fundTeamDevelopment(owner, amount);
 }
@@ -373,7 +404,6 @@ bytes32 tokenRecoveryAdmin = judgeTreasury.TOKEN_RECOVERY_ROLE();
 bytes32 fundManagerRole = judgeTreasury.FUND_MANAGER_ROLE();
 address strandedTokenAddr = address(sampleERC20);
 uint256 misplacedAmount = 1000 ether;
-uint256 tooHighAmount = 1001 ether;
 uint256 invalidAmount;
 sampleERC20.mint(user1, misplacedAmount);
 

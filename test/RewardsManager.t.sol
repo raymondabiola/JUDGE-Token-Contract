@@ -6,12 +6,14 @@ import "forge-std/console.sol";
 import "../src/JudgeToken.sol";
 import "../src/RewardsManager.sol";
 import "../src/JudgeTreasury.sol";
+import "../src/JudgeStaking.sol";
 import "../src/SampleERC20.sol";
 
 contract RewardsManagerTest is Test{
     JudgeToken public judgeToken;
     RewardsManager public rewardsManager;
     JudgeTreasury public judgeTreasury;
+    JudgeStaking public judgeStaking;
     SampleERC20 public sampleERC20;
 
     address public owner;
@@ -21,6 +23,7 @@ contract RewardsManagerTest is Test{
     address public user3;
     uint8 private decimals = 18;
     uint256 public initialSupply = 100_000 * 10 ** uint256(decimals);
+    uint8 public earlyWithdrawalPercent = 10;
 
     error InvalidAddress();
     error EOANotAllowed();
@@ -41,14 +44,17 @@ contract RewardsManagerTest is Test{
 
     judgeToken = new JudgeToken(initialSupply);
     rewardsManager = new RewardsManager(address(judgeToken));
-    judgeTreasury = new JudgeTreasury(address(judgeToken), address(rewardsManager));
+    judgeStaking = new JudgeStaking(address(judgeToken), earlyWithdrawalPercent);
+    judgeTreasury = new JudgeTreasury(address(judgeToken), address(rewardsManager), address(judgeStaking));
     bytes32 rewardsManagerAdmin = rewardsManager.REWARDS_MANAGER_ADMIN_ROLE();
     rewardsManager.grantRole(rewardsManagerAdmin, owner);
     rewardsManager.setKeyParameter(address(judgeTreasury));
     bytes32 minterRole = judgeToken.MINTER_ROLE();
     bytes32 rewardsManagerPrecisebalanceUpdater = rewardsManager.REWARDS_MANAGER_PRECISE_BALANCE_UPDATER();
+    bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
     rewardsManager.grantRole(rewardsManagerPrecisebalanceUpdater, address(judgeTreasury));
     judgeToken.grantRole(minterRole, address(judgeTreasury));
+    judgeTreasury.grantRole(treasuryAdmin, owner);
     
     sampleERC20 = new SampleERC20();
     }
@@ -130,8 +136,11 @@ contract RewardsManagerTest is Test{
     uint256 amount = 250_000 * 10 ** uint256(decimals);
     uint256 amountHigherThanBalance = 1_250_001 * 10 ** uint256(decimals);
     uint256 invalidAmount;
+    uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
+    uint256 index = 1;
+    judgeTreasury.setNewQuarterlyRewards(rewards);
     judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
-    judgeTreasury.fundRewardsManager();
+    judgeTreasury.fundRewardsManager(index);
 
     vm.expectRevert(
         abi.encodeWithSelector(
@@ -157,10 +166,13 @@ contract RewardsManagerTest is Test{
     rewardsManager.adminWithdrawal(user2, amountHigherThanBalance);
     rewardsManager.adminWithdrawal(user2, amount);
     assertEq(judgeToken.balanceOf(user2), amount);
-    assertEq(judgeToken.balanceOf(address(rewardsManager)), 1_100_000 * 10 ** uint256(decimals));
+    assertEq(judgeToken.balanceOf(address(rewardsManager)), 850_000 * 10 ** uint256(decimals));
     }
 
     function testEmergencyWithdrawal()public{
+    uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
+    uint256 index = 1;
+    judgeTreasury.setNewQuarterlyRewards(rewards);
     bytes32 fundManagerAdminTreasury = judgeTreasury.FUND_MANAGER_ROLE();
     bytes32 fundManagerAdminRewardsManager = rewardsManager.FUND_MANAGER_ROLE();
     vm.expectRevert(
@@ -178,25 +190,28 @@ contract RewardsManagerTest is Test{
     rewardsManager.emergencyWithdrawal(user1);
 
     judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
-    judgeTreasury.fundRewardsManager();
+    judgeTreasury.fundRewardsManager(index);
 
     vm.expectRevert(InvalidAddress.selector);
     rewardsManager.emergencyWithdrawal(zeroAddress);
     vm.expectRevert(CannotInputThisContractAddress.selector);
     rewardsManager.emergencyWithdrawal(address(rewardsManager));
     rewardsManager.emergencyWithdrawal(user1);
-    assertEq(judgeToken.balanceOf(user1), 1_250_000 * 10 ** uint256(decimals));
+    assertEq(judgeToken.balanceOf(user1), 1_000_000 * 10 ** uint256(decimals));
     }
 
     function testCalculateMisplacedJudge()public{
     bytes32 fundManagerAdminTreasury = judgeTreasury.FUND_MANAGER_ROLE();
     bytes32 tokenRecoveryAdmin = rewardsManager.TOKEN_RECOVERY_ROLE();
+    uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
+    uint256 index = 1;
+    judgeTreasury.setNewQuarterlyRewards(rewards);
     uint256 misplacedAmount = 100_000 * 10 ** uint256(decimals);
     judgeToken.mint(user3, misplacedAmount);
     vm.prank(user3);
     judgeToken.transfer(address(rewardsManager), misplacedAmount);
     judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
-    judgeTreasury.fundRewardsManager();
+    judgeTreasury.fundRewardsManager(index);
 
     vm.expectRevert(
         abi.encodeWithSelector(
@@ -224,8 +239,11 @@ contract RewardsManagerTest is Test{
     judgeToken.mint(user3, misplacedAmount);
     vm.prank(user3);
     judgeToken.transfer(address(rewardsManager), misplacedAmount);
+    uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
+    uint256 index = 1;
+    judgeTreasury.setNewQuarterlyRewards(rewards);
     judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
-    judgeTreasury.fundRewardsManager();
+    judgeTreasury.fundRewardsManager(index);
 
     vm.expectRevert(
         abi.encodeWithSelector(
@@ -358,5 +376,9 @@ contract RewardsManagerTest is Test{
         rewardsManager.transferFeesFromOtherTokensOutOfRewardsManager(strandedTokenAddr, user2, misplacedAmount/10);
         assertEq(sampleERC20.balanceOf(user2), misplacedAmount/10);
         assertEq(rewardsManager.feeBalanceOfStrandedToken(strandedTokenAddr), 0);
+        }
+
+        function testSendRewards()public{
+            
         }
 }

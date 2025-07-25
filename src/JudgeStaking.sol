@@ -93,6 +93,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     error EOANotAllowed();
     error ValueHigherThanThreshold();
     error NotUpToThreshold();
+    error OverPaidRewards();
 
     constructor(
         address _judgeTokenAddress,
@@ -148,19 +149,19 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit EarlyWithdrawPenaltyPercentUpdated(_earlyWithdrawPenaltyPercent);
     }
 
-    function getCurrentQuarterIndex()public returns(uint256){
+    function getCurrentQuarterIndex()public view returns(uint256){
         return (block.timestamp - stakingPoolStartTime) / 90 days;
     }
 
     function calculateRewardsPerBlock()public onlyRole(STAKING_ADMIN_ROLE)returns(uint256){
 
-       uint256 currentIndex = getCurrentQuarterIndex();
-        totalRewards = judgeTreasury.quarterlyRewards(currentIndex) + judgeTreasury.additionalQuarterRewards(currentIndex);
+       uint256 currentQuarterIndex = getCurrentQuarterIndex();
+        uint256 totalRewards = judgeTreasury.quarterlyRewards(currentQuarterIndex) + judgeTreasury.additionalQuarterRewards(currentQuarterIndex);
         uint256 totalRewardsPaidinCurrentQuarter = quarterRewardsPaid[currentQuarterIndex];
         require (totalRewards >= totalRewardsPaidinCurrentQuarter, OverPaidRewards());
         uint256 remainingRewards = totalRewards - totalRewardsPaidinCurrentQuarter;
 
-        uint256 quarterStart =stakingPoolStartTime + (currentIndex-1) * 90 days;
+        uint256 quarterStart =stakingPoolStartTime + (currentQuarterIndex-1) * 90 days;
         uint256 quarterEnd = quarterStart + 90 days;
 
         if(block.timestamp > quarterEnd){
@@ -169,15 +170,16 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         uint256 remainingTime = quarterEnd - block.timestamp;
         uint8 sepoliaBlockTime = 12 seconds;
-        uint32 numberOfBlocksLeft = remainingTime / sepoliaBlockTime;
-        if(remainingBlocks == 0){
+        uint256 numberOfBlocksLeft = remainingTime / sepoliaBlockTime;
+        if(numberOfBlocksLeft== 0){
             return 0;
         }
-       return remainingRewards / numberOfBlocksLeft;
+      rewardsPerBlock = remainingRewards / uint256(numberOfBlocksLeft);
+      return rewardsPerBlock;
     }
 
     function getCurrentAPR() public returns(uint256){
-        uint256 rewardsPerBlock = calculateRewardsPerBlock();
+        rewardsPerBlock = calculateRewardsPerBlock();
         uint256 blocksPerYear = 365 days / 12 seconds;
         // APR is scaled by 1e18, divide by same factor and multiply by 100 to get exact value
         return (rewardsPerBlock * blocksPerYear * 1e18) / totalStaked;

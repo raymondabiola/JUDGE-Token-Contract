@@ -41,7 +41,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
     event RewardsManagerAddressInitialized(address indexed rewardsManagerAddress);
-    event KeyParameterUpdated(address indexed oldRewardsManagerAddress, address indexed newRewardsManagerAddress);
+    event KeyParametersUpdated( address indexed newRewardsManagerAddress, address indexed newJudgeStakingAddress);
     event FeePercentUpdated(uint8 oldValue, uint8 newValue);
     event JudgeRecoveryMinimumThresholdUpdated(uint256 oldValue, uint256 newValue);
     event RewardsManagerFunded(uint256 amount);
@@ -59,15 +59,17 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error CannotInputThisContractAddress();
     error InsufficientContractBalance();
     error EOANotAllowed();
+    error OutOfSetRange();
     error TotalStakingRewardAllocationExceeded();
     error TeamDevelopmentAllocationExceeded();
     error ExceedsRemainingAllocation();
     error NotUpToThreshold();
     error ValueHigherThanThreshold();
+    error RewardsFromAllocationNotYetpaid();
 
     constructor(address _judgeTokenAddress, address _rewardsManagerAddress, address _judgeStakingAddress) {
-        require(_judgeTokenAddress != address(0) && _rewardsManagerAddress != address(0), InvalidAddress());
-        require(_judgeTokenAddress.code.length > 0 && _rewardsManagerAddress.code.length > 0, EOANotAllowed());
+        require(_judgeTokenAddress != address(0) && _rewardsManagerAddress != address(0) && _judgeStakingAddress != address(0), InvalidAddress());
+        require(_judgeTokenAddress.code.length > 0 && _rewardsManagerAddress.code.length > 0 && _judgeStakingAddress.code.length > 0, EOANotAllowed());
         judgeToken = JudgeToken(_judgeTokenAddress);
         rewardsManager = RewardsManager(_rewardsManagerAddress);
         judgeStaking = JudgeStaking(_judgeStakingAddress);
@@ -98,32 +100,33 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         _;
     }
 
-    function updateKeyParameters(address newRewardsManagerAddress, address _judgeStakingAddress) external validAddress(newRewardsManagerAddress) notSelf(newRewardsManagerAddress) onlyRole(TREASURY_ADMIN_ROLE) {
-        require(newRewardsManagerAddress.code.length > 0, EOANotAllowed());
-        address oldRewardsManagerAddress = address(rewardsManager);
+    function updateKeyParameters(address newRewardsManagerAddress, address newJudgeStakingAddress) external onlyRole(TREASURY_ADMIN_ROLE) {
+        require(newRewardsManagerAddress != address(0) && newJudgeStakingAddress != address(0), InvalidAddress());
+        require(newRewardsManagerAddress != address(this) && newJudgeStakingAddress != address(this), CannotInputThisContractAddress());
+        require(newRewardsManagerAddress.code.length > 0 && newJudgeStakingAddress.code.length > 0, EOANotAllowed());
         rewardsManager = RewardsManager(newRewardsManagerAddress);
-        judgeStaking = JudgeStaking(_judgeStakingAddress);
+        judgeStaking = JudgeStaking(newJudgeStakingAddress);
 
-        emit KeyParameterUpdated(oldRewardsManagerAddress, newRewardsManagerAddress);
+        emit KeyParametersUpdated(newRewardsManagerAddress, newJudgeStakingAddress);
     }
 
     function setNewQuarterlyRewards(uint256 _reward)public onlyRole(TREASURY_ADMIN_ROLE){
         require(_reward != 0, InvalidAmount());
-        require(_reward >= MIN_QUARTERLY_REWARD_ALLOCATION && _reward <= MAX_QUARTERLY_REWARD_ALLOCATION, OutOfRange());
+        require(_reward >= MIN_QUARTERLY_REWARD_ALLOCATION && _reward <= MAX_QUARTERLY_REWARD_ALLOCATION, OutOfSetRange());
     quarterlyRewards[quarterIndex] = _reward;
     quarterIndex += 1;
     }
 
-    function addToQuarterReward(address _from, uint256 _reward)public onlyRole(TREASURY_ADMIN_ROLE){
+    function addToQuarterReward(address _from, uint256 _reward)external{
        require(_from != address(0), InvalidAddress());
         require(_reward != 0, InvalidAmount());
         uint256 currentQuarterIndex = judgeStaking.getCurrentQuarterIndex();
-    require(setQuarterlyRewardsAtIndexWasPaidToRewardsManager[currentQuarterIndex], rewardsFromAllocationNotYetpaid());
+    require(setQuarterlyRewardsAtIndexWasPaidToRewardsManager[currentQuarterIndex], RewardsFromAllocationNotYetpaid());
         additionalQuarterRewards[currentQuarterIndex] += _reward;
-        judgeToken.SafeTransferFrom(_from, address(rewardsManager), _reward);
+        judgeToken.safeTransferFrom(_from, address(rewardsManager), _reward);
         rewardsManager.increaseRewardsManagerPreciseBalance(_reward);
-
     }
+    
     function updateFeePercent(uint8 _newFeePercent) external onlyRole(TREASURY_ADMIN_ROLE){
         require(_newFeePercent < FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
         uint8 oldFeePercent = feePercent;
