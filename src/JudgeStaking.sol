@@ -150,7 +150,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function getCurrentQuarterIndex()public view returns(uint256){
-        return (block.timestamp - stakingPoolStartTime) / 90 days;
+        return (block.timestamp - stakingPoolStartTime) / 90 days + 1;
     }
 
     function calculateRewardsPerBlock()public onlyRole(STAKING_ADMIN_ROLE)returns(uint256){

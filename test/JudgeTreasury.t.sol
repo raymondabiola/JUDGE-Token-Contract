@@ -38,6 +38,8 @@ error NotUpToThreshold();
 error JudgeTokenRecoveryNotAllowed();
 error InsufficientContractBalance();
 error ValueHigherThanThreshold();
+error RewardsInputedOutOfDefinedRange();
+error CurrentQuarterAllocationNotYetFunded();
 
 function setUp() public {
 owner = address(this);
@@ -117,11 +119,76 @@ assertEq(address(judgeTreasury.judgeStaking()), address(judgeToken));
 }
 
 function testSetNewQuarterlyRewards()public{
+bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
+uint256 firstQuarterRewards = 1_000_000 * 10 ** uint256(decimals);
+uint256 secondQuarterRewards = 1_250_000 * 10 ** uint256(decimals);
 
+uint256 invalidReward;
+uint256 rewardsLowerThanMin = 416_665 * 10 ** uint256(decimals);
+uint256 rewardsHigherThanMax = 1_250_001 * 10 ** uint256(decimals);
+
+vm.expectRevert(
+    abi.encodeWithSelector(
+        AccessControlUnauthorizedAccount.selector,
+        user2,
+        treasuryAdmin
+    )
+);
+vm.prank(user2);
+judgeTreasury.setNewQuarterlyRewards(firstQuarterRewards);
+
+vm.expectRevert(InvalidAmount.selector);
+judgeTreasury.setNewQuarterlyRewards(invalidReward);
+
+vm.expectRevert(RewardsInputedOutOfDefinedRange.selector);
+judgeTreasury.setNewQuarterlyRewards(rewardsLowerThanMin);
+
+vm.expectRevert(RewardsInputedOutOfDefinedRange.selector);
+judgeTreasury.setNewQuarterlyRewards(rewardsHigherThanMax);
+
+judgeTreasury.setNewQuarterlyRewards(firstQuarterRewards);
+
+judgeTreasury.setNewQuarterlyRewards(secondQuarterRewards);
+
+assertEq(judgeTreasury.quarterlyRewards(1), firstQuarterRewards);
+assertEq(judgeTreasury.quarterlyRewards(2), secondQuarterRewards);
 }
 
 function testAddToQuarterReward()public{
-    
+bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
+uint256 stakingStart = judgeStaking.stakingPoolStartTime();
+uint256 firstQuarterRewards = 1_000_000 * 10 ** uint256(decimals);
+uint256 secondQuarterRewards = 1_250_000 * 10 ** uint256(decimals);
+uint256 additionalRewards = 20_000 * 10 ** uint256(decimals);
+uint256 invalidRewards;
+uint256 q1Start = stakingStart;
+uint256 q2Start = stakingStart + 90 days;
+
+judgeTreasury.grantRole(fundManager, owner);
+
+judgeTreasury.setNewQuarterlyRewards(firstQuarterRewards);
+
+judgeTreasury.setNewQuarterlyRewards(secondQuarterRewards);
+
+vm.expectRevert(InvalidAmount.selector);
+judgeTreasury.addToQuarterReward(invalidRewards);
+vm.expectRevert(CurrentQuarterAllocationNotYetFunded.selector);
+judgeTreasury.addToQuarterReward(additionalRewards);
+
+judgeToken.approve(address(judgeTreasury), 40_000 * 10 ** uint256(decimals));
+vm.warp(q1Start);
+judgeTreasury.fundRewardsManager(1);
+judgeTreasury.addToQuarterReward(additionalRewards);
+
+assertEq(judgeToken.balanceOf(address(rewardsManager)), 1_020_000 * 10 ** uint256(decimals));
+assertEq(judgeToken.balanceOf(owner), 80_000 * 10 ** uint256(decimals));
+
+vm.warp(q2Start);
+judgeTreasury.fundRewardsManager(2);
+judgeTreasury.addToQuarterReward(additionalRewards);
+
+assertEq(judgeToken.balanceOf(address(rewardsManager)), 2_290_000 * 10 ** uint256(decimals));
+assertEq(judgeToken.balanceOf(owner), 60_000 * 10 ** uint256(decimals));
 }
 
 function testUpdateFeePercent()public{
@@ -161,7 +228,8 @@ assertEq(judgeTreasury.judgeRecoveryMinimumThreshold(), newJudgeRecoveryMinimumT
 function testFundRewardsManager() public{
     uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
     uint256 MAX_ALLOCATION = judgeToken.MAX_STAKING_REWARD_ALLOCATION();
-    uint256 newStakingRewardsFundFromTreasury = 49_000_001 * 10 ** uint256(decimals);
+    uint256 stakingRewardsFundFromTreasury1 = 49_000_001 * 10 ** uint256(decimals);
+    uint256 stakingRewardsFundFromTreasury2 = 40_000_000 * 10 ** uint256(decimals);
     bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
     uint256 index = 1;
 
@@ -174,16 +242,18 @@ vm.expectRevert(abi.encodeWithSelector(
 judgeTreasury.fundRewardsManager(index);
 
 judgeTreasury.grantRole(fundManager, owner);
-judgeTreasury.fundRewardsManager(index);
-assertEq(judgeTreasury.stakingRewardsFundsFromTreasury(), judgeTreasury.quarterlyRewards(index));
 
 vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(MAX_ALLOCATION));
 vm.expectRevert(TotalStakingRewardAllocationExceeded.selector);
 judgeTreasury.fundRewardsManager(index);
 
-vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(newStakingRewardsFundFromTreasury));
+vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(stakingRewardsFundFromTreasury1));
 vm.expectRevert(ExceedsRemainingAllocation.selector);
 judgeTreasury.fundRewardsManager(index);
+
+vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(stakingRewardsFundFromTreasury2));
+judgeTreasury.fundRewardsManager(index);
+assertEq(judgeTreasury.stakingRewardsFundsFromTreasury(), 41_000_000 * 10 ** uint256(decimals));
 }
 
 function testMintToTreasuryReserve() public{
@@ -412,7 +482,6 @@ sampleERC20.transfer(address(judgeTreasury), misplacedAmount);
 
 judgeTreasury.grantRole(tokenRecoveryAdmin, owner);
 judgeTreasury.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
-
 
 vm.expectRevert(
     abi.encodeWithSelector(

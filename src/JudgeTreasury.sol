@@ -59,13 +59,14 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error CannotInputThisContractAddress();
     error InsufficientContractBalance();
     error EOANotAllowed();
-    error OutOfSetRange();
+    error RewardsInputedOutOfDefinedRange();
     error TotalStakingRewardAllocationExceeded();
     error TeamDevelopmentAllocationExceeded();
     error ExceedsRemainingAllocation();
     error NotUpToThreshold();
     error ValueHigherThanThreshold();
-    error RewardsFromAllocationNotYetpaid();
+    error CurrentQuarterAllocationNotYetFunded();
+    error QuarterAllocationAlreadyFunded();
 
     constructor(address _judgeTokenAddress, address _rewardsManagerAddress, address _judgeStakingAddress) {
         require(_judgeTokenAddress != address(0) && _rewardsManagerAddress != address(0) && _judgeStakingAddress != address(0), InvalidAddress());
@@ -112,18 +113,17 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     function setNewQuarterlyRewards(uint256 _reward)public onlyRole(TREASURY_ADMIN_ROLE){
         require(_reward != 0, InvalidAmount());
-        require(_reward >= MIN_QUARTERLY_REWARD_ALLOCATION && _reward <= MAX_QUARTERLY_REWARD_ALLOCATION, OutOfSetRange());
+        require(_reward >= MIN_QUARTERLY_REWARD_ALLOCATION && _reward <= MAX_QUARTERLY_REWARD_ALLOCATION, RewardsInputedOutOfDefinedRange());
     quarterlyRewards[quarterIndex] = _reward;
     quarterIndex += 1;
     }
 
-    function addToQuarterReward(address _from, uint256 _reward)external{
-       require(_from != address(0), InvalidAddress());
+    function addToQuarterReward(uint256 _reward)external{
         require(_reward != 0, InvalidAmount());
         uint256 currentQuarterIndex = judgeStaking.getCurrentQuarterIndex();
-    require(setQuarterlyRewardsAtIndexWasPaidToRewardsManager[currentQuarterIndex], RewardsFromAllocationNotYetpaid());
+    require(setQuarterlyRewardsAtIndexWasPaidToRewardsManager[currentQuarterIndex], CurrentQuarterAllocationNotYetFunded());
         additionalQuarterRewards[currentQuarterIndex] += _reward;
-        judgeToken.safeTransferFrom(_from, address(rewardsManager), _reward);
+        judgeToken.safeTransferFrom(msg.sender, address(rewardsManager), _reward);
         rewardsManager.increaseRewardsManagerPreciseBalance(_reward);
     }
     
@@ -146,6 +146,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     }
 
     function fundRewardsManager(uint256 _index) external onlyRole(FUND_MANAGER_ROLE) {
+        require(!setQuarterlyRewardsAtIndexWasPaidToRewardsManager[_index], QuarterAllocationAlreadyFunded());
         require(stakingRewardsFundsFromTreasury < judgeToken.MAX_STAKING_REWARD_ALLOCATION(), TotalStakingRewardAllocationExceeded());
         require(quarterlyRewards[_index] <= judgeToken.MAX_STAKING_REWARD_ALLOCATION() - stakingRewardsFundsFromTreasury, ExceedsRemainingAllocation());
         judgeToken.mintFromAllocation(address(rewardsManager), quarterlyRewards[_index]);
