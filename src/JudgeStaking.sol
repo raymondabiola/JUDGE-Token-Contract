@@ -153,7 +153,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return (block.timestamp - stakingPoolStartTime) / 90 days + 1;
     }
 
-    function calculateRewardsPerBlock()public onlyRole(STAKING_ADMIN_ROLE)returns(uint256){
+    function calculateCurrentRewardsPerBlock()public onlyRole(STAKING_ADMIN_ROLE)returns(uint256){
 
        uint256 currentQuarterIndex = getCurrentQuarterIndex();
         uint256 totalRewards = judgeTreasury.quarterlyRewards(currentQuarterIndex) + judgeTreasury.additionalQuarterRewards(currentQuarterIndex);
@@ -179,7 +179,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function getCurrentAPR() public returns(uint256){
-        rewardsPerBlock = calculateRewardsPerBlock();
+        rewardsPerBlock = calculateCurrentRewardsPerBlock();
         uint256 blocksPerYear = 365 days / 12 seconds;
         // APR is scaled by 1e18, divide by same factor and multiply by 100 to get exact value
         return (rewardsPerBlock * blocksPerYear * 1e18) / totalStaked;
@@ -206,7 +206,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             lastRewardBlock = block.number;
         }
         uint256 blocksPassed = block.number - lastRewardBlock;
-        uint256 totalReward = blocksPassed * calculateRewardsPerBlock();
+        uint256 totalReward = blocksPassed * calculateCurrentRewardsPerBlock();
         accJudgePerShare += (totalReward * SCALE) / totalCalculatedStakeForReward;
         lastRewardBlock = block.number;
     }

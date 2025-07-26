@@ -32,6 +32,7 @@ contract JudgeStakingTest is Test{
     error InvalidAmount();
     error ValueTooHigh();
     error ValueHigherThanThreshold();
+    error OverPaidRewards();
 
 function setUp()public{
     owner = address(this);
@@ -140,16 +141,90 @@ judgeStaking.updateEarlyWithdrawPenaltyPercent(newEarlyWithdrawalPercent);
 assertEq(judgeStaking.earlyWithdrawPenaltyPercent(), 5);
 }
 
-function getCurrentQuarterIndex()public{
+function testGetCurrentQuarterIndex()public{
+uint256 startTime = judgeStaking.stakingPoolStartTime();
+assertEq(judgeStaking.getCurrentQuarterIndex(), 1);
 
+vm.warp(startTime + 90 days);
+assertEq(judgeStaking.getCurrentQuarterIndex(), 2);
+
+vm.warp(startTime + 180 days);
+assertEq(judgeStaking.getCurrentQuarterIndex(), 3);
 }
 
-function testCalculateRewardsPerBlock()public{
+function testCalculateCurrentRewardsPerBlock()public{
+bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
+bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
+bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
+uint256 poolStartTime = judgeStaking.stakingPoolStartTime();
+uint256 firstQuarterRewards = 1_000_000 * 10 ** uint256(decimals);
+uint256 additionalRewards = 20_000 * 10 ** uint256(decimals);
 
+judgeToken.approve(address(judgeTreasury), 40_000 * 10 ** uint256(decimals));
+judgeTreasury.grantRole(treasuryAdmin, owner);
+judgeTreasury.grantRole(fundManager, owner);
+judgeStaking.grantRole(stakingAdmin, owner);
+
+vm.warp(poolStartTime);
+judgeTreasury.setNewQuarterlyRewards(firstQuarterRewards);
+judgeTreasury.fundRewardsManager(1);
+judgeTreasury.addToQuarterReward(additionalRewards);
+uint256 totalRewards = firstQuarterRewards + additionalRewards;
+uint256 assumedTotalCurrentQuarterRewardspaid1 = 1_020_001 * 10 ** uint256(decimals);
+uint256 assumedTotalCurrentQuarterRewardspaid2 = 400_000 * 10 ** uint256(decimals);
+uint256 baseSlotQuarterlyRewardsPaid = 21;
+bytes32 firstQuarterRewardsPaidSlot = keccak256(abi.encode(1, uint256(baseSlotQuarterlyRewardsPaid)));
+vm.store(address(judgeStaking), firstQuarterRewardsPaidSlot, bytes32(assumedTotalCurrentQuarterRewardspaid1));
+
+vm.expectRevert(OverPaidRewards.selector);
+judgeStaking.calculateCurrentRewardsPerBlock();
+
+vm.warp(poolStartTime + 40 days);
+vm.store(address(judgeStaking), firstQuarterRewardsPaidSlot, bytes32(assumedTotalCurrentQuarterRewardspaid2));
+uint256 remainingRewards = totalRewards - assumedTotalCurrentQuarterRewardspaid2;
+uint256 remainingTime = 50 days;
+uint256 numberOfBlocksLeft = remainingTime / 12;
+uint256 rewardPerBlock = remainingRewards / numberOfBlocksLeft;
+assertEq(judgeStaking.calculateCurrentRewardsPerBlock(), rewardPerBlock);
+
+vm.warp(poolStartTime + 91 days);
+assertEq(judgeStaking.calculateCurrentRewardsPerBlock(), 0);
 }
 
 function testGetCurrentAPR()public{
-    
+bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
+bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
+bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
+uint256 poolStartTime = judgeStaking.stakingPoolStartTime();
+uint256 firstQuarterRewards = 1_000_000 * 10 ** uint256(decimals);
+uint256 additionalRewards = 20_000 * 10 ** uint256(decimals);
+
+judgeTreasury.grantRole(treasuryAdmin, owner);
+judgeTreasury.grantRole(fundManager, owner);
+judgeStaking.grantRole(stakingAdmin, owner);
+
+vm.warp(poolStartTime);
+judgeTreasury.setNewQuarterlyRewards(firstQuarterRewards);
+judgeTreasury.fundRewardsManager(1);
+
+uint256 assumedTotalStaked = 10_000_000 * 10 ** uint256(decimals);
+uint256 rewardsPerBlock1 = judgeStaking.calculateCurrentRewardsPerBlock();
+vm.store(address(judgeStaking), bytes32(uint256(12)), bytes32(assumedTotalStaked));
+uint256 apr1 = (rewardsPerBlock1 * 365 days / 12 * 1e18) / judgeStaking.totalStaked();
+
+assertEq(judgeStaking.getCurrentAPR(), apr1);
+
+uint256 assumedTotalCurrentQuarterRewardspaid1 = 400_000 * 10 ** uint256(decimals);
+uint256 baseSlotQuarterlyRewardsPaid = 21;
+bytes32 firstQuarterRewardsPaidSlot = keccak256(abi.encode(1, uint256(baseSlotQuarterlyRewardsPaid)));
+
+vm.warp(poolStartTime + 40 days);
+judgeToken.approve(address(judgeTreasury), 40_000 * 10 ** uint256(decimals));
+judgeTreasury.addToQuarterReward(additionalRewards);
+vm.store(address(judgeStaking), firstQuarterRewardsPaidSlot, bytes32(assumedTotalCurrentQuarterRewardspaid1));
+uint256 rewardsPerBlock2 = judgeStaking.calculateCurrentRewardsPerBlock();
+uint256 apr2 = (rewardsPerBlock2 * 365 days / 12 * 1e18) / judgeStaking.totalStaked();
+assertEq(judgeStaking.getCurrentAPR(), apr2);
 }
 
 function testUpdateFeePercent()public{
