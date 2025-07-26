@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {AccessControl} from "../lib/openzeppelin-contracts/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "../lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {SafeERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Math} from "../lib/openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {JudgeToken} from "./JudgeToken.sol";
 import {JudgeTreasury} from "./JudgeTreasury.sol";
@@ -129,7 +130,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         uint256 misplacedJudgeAmount = calculateMisplacedJudge();
         require(_amount <= misplacedJudgeAmount, InvalidAmount());
         require(_amount >= judgeRecoveryMinimumThreshold, NotUpToThreshold());
-        uint256 refund = (_amount * (100-uint256(feePercent)))/100;
+        uint256 refund = Math.mulDiv(_amount, (100-uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
         judgeToken.safeTransfer(address(judgeTreasury), fee);
         judgeTreasury.increaseTreasuryPreciseBalance(fee);
@@ -145,7 +146,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
         require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), InsufficientContractBalance());
         
-        uint256 refund = (_amount * (100-uint256(feePercent)))/100;
+         uint256 refund = Math.mulDiv(_amount, (100-uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
         feeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
         IERC20(_strandedTokenAddr).safeTransfer(_addr, refund);

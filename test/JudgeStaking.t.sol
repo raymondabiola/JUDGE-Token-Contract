@@ -7,6 +7,7 @@ import "../src/JudgeToken.sol";
 import "../src/JudgeStaking.sol";
 import "../src/RewardsManager.sol";
 import "../src/JudgeTreasury.sol";
+import {Math} from "../lib/openzeppelin-contracts/contracts/utils/math/Math.sol";
 import "../src/SampleERC20.sol";
 
 contract JudgeStakingTest is Test{
@@ -33,6 +34,7 @@ contract JudgeStakingTest is Test{
     error ValueTooHigh();
     error ValueHigherThanThreshold();
     error OverPaidRewards();
+    error InvalidLockUpPeriod();
 
 function setUp()public{
     owner = address(this);
@@ -62,6 +64,7 @@ function setUp()public{
     rewardsManager.grantRole(rewardsManagerPreciseBalanceUpdater, address(judgeTreasury));
      judgeTreasury.grantRole(treasuryPreciseBalanceUpdater, address(judgeStaking));
      judgeToken.grantRole(minterRole, address(judgeTreasury)); 
+     judgeToken.grantRole(minterRole, owner);
 }
 
 function testDeployerIsOwner()public{
@@ -155,7 +158,6 @@ assertEq(judgeStaking.getCurrentQuarterIndex(), 3);
 function testCalculateCurrentRewardsPerBlock()public{
 bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
 bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
-bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
 uint256 poolStartTime = judgeStaking.stakingPoolStartTime();
 uint256 firstQuarterRewards = 1_000_000 * 10 ** uint256(decimals);
 uint256 additionalRewards = 20_000 * 10 ** uint256(decimals);
@@ -163,7 +165,6 @@ uint256 additionalRewards = 20_000 * 10 ** uint256(decimals);
 judgeToken.approve(address(judgeTreasury), 40_000 * 10 ** uint256(decimals));
 judgeTreasury.grantRole(treasuryAdmin, owner);
 judgeTreasury.grantRole(fundManager, owner);
-judgeStaking.grantRole(stakingAdmin, owner);
 
 vm.warp(poolStartTime);
 judgeTreasury.setNewQuarterlyRewards(firstQuarterRewards);
@@ -268,7 +269,37 @@ assertEq(judgeStaking.judgeRecoveryMinimumThreshold(), newJudgeRecoveryMinimumTh
 }
 
 function testDeposit()public{
+uint256 amount = 100_000 * 10 ** uint256(decimals);
+uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
+uint256 invalidDepositAmount;
+uint32 lockUpPeriod = 180;
+uint32 zeroLockUpPeriod;
+uint32 higherThanMaxLockUpPeriod = 361;
+judgeToken.mint(user1, amount);
 
+vm.startPrank(user1);
+vm.expectRevert(InvalidAmount.selector);
+judgeStaking.deposit(invalidDepositAmount, lockUpPeriod);
+
+vm.expectRevert(InvalidAmount.selector);
+judgeStaking.deposit(depositAmount, zeroLockUpPeriod);
+
+vm.expectRevert(InvalidLockUpPeriod.selector);
+judgeStaking.deposit(depositAmount, higherThanMaxLockUpPeriod);
+
+judgeToken.approve(address(judgeStaking), depositAmount);
+uint256 timeStamp = block.timestamp;
+judgeStaking.deposit(depositAmount, lockUpPeriod);
+vm.stopPrank();
+uint256 accJudgePerShare = judgeStaking.accJudgePerShare();
+assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).id, 1);
+assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).amountStaked, depositAmount);
+assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).lockUpPeriod, lockUpPeriod);
+assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).depositTimestamp, timeStamp);
+assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).maturityTimestamp, timeStamp + lockUpPeriod);
+assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).calculatedStakeForReward, depositAmount/2);
+assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).lockUpRatio, Math.mulDiv(lockUpPeriod, 1e18, 360));
+assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).rewardDebt, Math.mulDiv(depositAmount/2 , accJudgePerShare, 1e18));
 }
 
 function testClaimRewards()public{

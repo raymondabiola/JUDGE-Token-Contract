@@ -6,6 +6,7 @@ import {ReentrancyGuard} from "../lib/openzeppelin-contracts/contracts/utils/Ree
 import {SafeERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import {JudgeToken} from "./JudgeToken.sol";
 import {JudgeTreasury} from "./JudgeTreasury.sol";
+import {Math} from "../lib/openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 interface IRewardsManager {
@@ -153,7 +154,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return (block.timestamp - stakingPoolStartTime) / 90 days + 1;
     }
 
-    function calculateCurrentRewardsPerBlock()public onlyRole(STAKING_ADMIN_ROLE)returns(uint256){
+    function calculateCurrentRewardsPerBlock()public returns(uint256){
 
        uint256 currentQuarterIndex = getCurrentQuarterIndex();
         uint256 totalRewards = judgeTreasury.quarterlyRewards(currentQuarterIndex) + judgeTreasury.additionalQuarterRewards(currentQuarterIndex);
@@ -161,7 +162,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         require (totalRewards >= totalRewardsPaidinCurrentQuarter, OverPaidRewards());
         uint256 remainingRewards = totalRewards - totalRewardsPaidinCurrentQuarter;
 
-        uint256 quarterStart =stakingPoolStartTime + (currentQuarterIndex-1) * 90 days;
+        uint256 quarterStart = stakingPoolStartTime + (currentQuarterIndex-1) * 90 days;
         uint256 quarterEnd = quarterStart + 90 days;
 
         if(block.timestamp > quarterEnd){
@@ -182,7 +183,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         rewardsPerBlock = calculateCurrentRewardsPerBlock();
         uint256 blocksPerYear = 365 days / 12 seconds;
         // APR is scaled by 1e18, divide by same factor and multiply by 100 to get exact value
-        return (rewardsPerBlock * blocksPerYear * 1e18) / totalStaked;
+        return Math.mulDiv(Math.mulDiv(rewardsPerBlock, blocksPerYear, 1), 1e18, totalStaked);
     }
 
      function updateFeePercent(uint8 _newFeePercent) external onlyRole(STAKING_ADMIN_ROLE){
@@ -207,13 +208,13 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
         uint256 blocksPassed = block.number - lastRewardBlock;
         uint256 totalReward = blocksPassed * calculateCurrentRewardsPerBlock();
-        accJudgePerShare += (totalReward * SCALE) / totalCalculatedStakeForReward;
+        accJudgePerShare += Math.mulDiv(totalReward, SCALE, totalCalculatedStakeForReward);
         lastRewardBlock = block.number;
     }
 
     function accumulatedStakeRewards(uint16 _index) internal view returns(uint256){
          userStake storage stake = userStakes[msg.sender][_index];
-        uint256 accRewards = (stake.calculatedStakeForReward * accJudgePerShare) / SCALE;
+        uint256 accRewards = Math.mulDiv(stake.calculatedStakeForReward, accJudgePerShare, SCALE);
         return accRewards;
     }
 
@@ -224,13 +225,14 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             isUser[msg.sender] = true;
         }
 
-        updatePool();
         uint256 amountStaked = _amount;
         uint32 lockUpPeriod = _lockUpPeriodInDays;
-        uint256 lockUpRatio = (lockUpPeriod * SCALE) / maxLockUpPeriod;
-        uint256 calculatedStakeForReward = (amountStaked * lockUpRatio) / SCALE;
+        uint256 lockUpRatio = Math.mulDiv(lockUpPeriod, SCALE, maxLockUpPeriod);
+        uint256 calculatedStakeForReward = Math.mulDiv(amountStaked, lockUpRatio, SCALE);
+        totalCalculatedStakeForReward += calculatedStakeForReward;
         uint256 depositTimestamp = block.timestamp;
-        uint256 rewardDebt = (calculatedStakeForReward * accJudgePerShare) / SCALE;
+        updatePool();
+        uint256 rewardDebt = Math.mulDiv(calculatedStakeForReward, accJudgePerShare, SCALE);
         uint256 maturityTimestamp = depositTimestamp + lockUpPeriod;
 
         userStake memory newStake = userStake({
@@ -247,7 +249,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         judgeToken.safeTransferFrom(msg.sender, address(this), _amount);
         userStakes[msg.sender].push(newStake);
 
-        totalCalculatedStakeForReward += calculatedStakeForReward;
         totalStaked += _amount;
 
         newStakeId++;
@@ -283,7 +284,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
         totalCalculatedStakeForReward -= stake.calculatedStakeForReward;
         stake.amountStaked -= _amount;
-        stake.calculatedStakeForReward = (stake.amountStaked * stake.lockUpRatio) / SCALE;
+        stake.calculatedStakeForReward = Math.mulDiv(stake.amountStaked, stake.lockUpRatio, SCALE);
         totalCalculatedStakeForReward += stake.calculatedStakeForReward;
         stake.rewardDebt = accumulatedStakeRewards(_index);
         totalStaked -= _amount;
@@ -326,7 +327,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
 
         totalCalculatedStakeForReward -= stake.calculatedStakeForReward;
-        uint256 penalty = (_amount * earlyWithdrawPenaltyPercent) / 100;
+        uint256 penalty = Math.mulDiv(_amount, earlyWithdrawPenaltyPercent, 100);
         uint256 deduction = _amount + penalty;
         require(deduction <= stake.amountStaked, InsufficientBalance());
         if (deduction == stake.amountStaked) {
@@ -335,7 +336,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             stake.rewardDebt = 0;
         } else {
             stake.amountStaked -= deduction;
-            stake.calculatedStakeForReward = (stake.amountStaked * stake.lockUpRatio) / SCALE;
+            stake.calculatedStakeForReward = Math.mulDiv(stake.amountStaked, stake.lockUpRatio, SCALE);
             totalCalculatedStakeForReward += stake.calculatedStakeForReward;
             stake.rewardDebt = accumulatedStakeRewards(_index);
         }
@@ -359,7 +360,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
                 updatePool();
                 if (stake.amountStaked > 0) {
-                    uint256 pending = (stake.amountStaked * accJudgePerShare) / SCALE - stake.rewardDebt;
+                    uint256 pending = Math.mulDiv(stake.amountStaked, accJudgePerShare, SCALE) - stake.rewardDebt;
 
                     rewardsManager.sendRewards(msg.sender, pending);
                     quarterRewardsPaid[currentQuarterIndex] += pending;
@@ -410,9 +411,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         if (block.number > lastRewardBlock && totalCalculatedStakeForReward > 0) {
             uint256 blocksPassed = block.number - lastRewardBlock;
             uint256 totalReward = blocksPassed * rewardsPerBlock;
-            tempAccJudgePerShare += (totalReward * SCALE) / totalCalculatedStakeForReward;
+            tempAccJudgePerShare += Math.mulDiv(totalReward, SCALE, totalCalculatedStakeForReward);
         }
-        uint256 pendingReward = (stake.calculatedStakeForReward * tempAccJudgePerShare) / SCALE - stake.rewardDebt;
+        uint256 pendingReward = Math.mulDiv(stake.calculatedStakeForReward, tempAccJudgePerShare, SCALE) - stake.rewardDebt;
         return pendingReward;
     }
 
@@ -426,7 +427,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 misplacedJudgeAmount = calculateMisplacedJudge();
         require(_amount <= misplacedJudgeAmount, InvalidAmount());
         require(_amount >= judgeRecoveryMinimumThreshold, NotUpToThreshold());
-        uint256 refund = (_amount * (100-uint256(feePercent)))/100;
+        uint256 refund = Math.mulDiv(_amount, (100-uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
         judgeToken.safeTransfer(address(judgeTreasury), fee);
         judgeTreasury.increaseTreasuryPreciseBalance(fee);
@@ -442,7 +443,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
         require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), InsufficientContractBalance());
         
-        uint256 refund = (_amount * (100-uint256(feePercent)))/100;
+        uint256 refund = Math.mulDiv(_amount, (100-uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
         feeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
         IERC20(_strandedTokenAddr).safeTransfer(_addr, refund);
