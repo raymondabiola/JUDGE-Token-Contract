@@ -126,6 +126,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         additionalQuarterRewards[currentQuarterIndex] += _reward;
         judgeToken.safeTransferFrom(msg.sender, address(rewardsManager), _reward);
         rewardsManager.increaseRewardsManagerPreciseBalance(_reward);
+        judgeStaking.calculateCurrentRewardsPerBlock();
     }
     
     function updateFeePercent(uint8 _newFeePercent) external onlyRole(TREASURY_ADMIN_ROLE){
@@ -154,6 +155,8 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         stakingRewardsFundsFromTreasury += quarterlyRewards[_index];
         rewardsManager.increaseRewardsManagerPreciseBalance(quarterlyRewards[_index]);
         setQuarterlyRewardsAtIndexWasPaidToRewardsManager[_index] = true;
+
+        judgeStaking.calculateCurrentRewardsPerBlock();
 
         emit RewardsManagerFunded(quarterlyRewards[_index]);
     }

@@ -27,8 +27,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint256 public stakingPoolStartTime;
     uint64 private newStakeId;
     uint256 public accJudgePerShare;
-    uint256 internal rewardsPerQuarter;
-    uint256 internal rewardsPerBlock;
+    uint256 public rewardsPerBlock;
     uint256 public lastRewardBlock;
     uint256 public totalCalculatedStakeForReward;
     uint256 public totalStaked;
@@ -205,6 +204,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
         if (totalCalculatedStakeForReward == 0) {
             lastRewardBlock = block.number;
+            return;
         }
         uint256 blocksPassed = block.number - lastRewardBlock;
         uint256 totalReward = blocksPassed * calculateCurrentRewardsPerBlock();
@@ -228,12 +228,17 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 amountStaked = _amount;
         uint32 lockUpPeriod = _lockUpPeriodInDays;
         uint256 lockUpRatio = Math.mulDiv(lockUpPeriod, SCALE, maxLockUpPeriod);
+        uint256 depositTimestamp = block.timestamp;
+        uint256 maturityTimestamp = depositTimestamp + lockUpPeriod;
         uint256 calculatedStakeForReward = Math.mulDiv(amountStaked, lockUpRatio, SCALE);
         totalCalculatedStakeForReward += calculatedStakeForReward;
-        uint256 depositTimestamp = block.timestamp;
+        lastRewardBlock = block.number;
+        totalStaked += _amount;
+
         updatePool();
         uint256 rewardDebt = Math.mulDiv(calculatedStakeForReward, accJudgePerShare, SCALE);
-        uint256 maturityTimestamp = depositTimestamp + lockUpPeriod;
+        
+       
 
         userStake memory newStake = userStake({
             id: newStakeId,
@@ -248,8 +253,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         judgeToken.safeTransferFrom(msg.sender, address(this), _amount);
         userStakes[msg.sender].push(newStake);
-
-        totalStaked += _amount;
 
         newStakeId++;
         emit Deposited(msg.sender, _amount);
@@ -386,18 +389,18 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return userStakes[msg.sender][_index];
     }
 
-    function viewUsersList() external view onlyRole(DEFAULT_ADMIN_ROLE) returns (address[] memory) {
+    function viewUsersList() external view onlyRole(STAKING_ADMIN_ROLE) returns (address[] memory) {
         return users;
     }
 
-    function viewUserStakes(address addr) external view validAddress(addr) onlyRole(DEFAULT_ADMIN_ROLE) returns (userStake[] memory) {
+    function viewUserStakes(address addr) external view validAddress(addr) onlyRole(STAKING_ADMIN_ROLE) returns (userStake[] memory) {
         return userStakes[addr];
     }
 
     function viewUserStakeAtIndex(address addr, uint16 _index)
         external
         view validAddress(addr)
-        onlyRole(DEFAULT_ADMIN_ROLE)
+        onlyRole(STAKING_ADMIN_ROLE)
         returns (userStake memory)
     {
         require(_index < userStakes[addr].length, InvalidIndex());
