@@ -24,7 +24,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     bytes32 public constant STAKING_ADMIN_ROLE = keccak256("STAKING_ADMIN_ROLE");
     bytes32 public constant TOKEN_RECOVERY_ROLE = keccak256("TOKEN_RECOVERY_ROLE");
 
-    uint256 public stakingPoolStartTime;
+    uint256 public stakingPoolStartBlock;
     uint64 private newStakeId;
     uint256 public accJudgePerShare;
     uint256 public rewardsPerBlock;
@@ -105,7 +105,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         newStakeId = 1;
         earlyWithdrawPenaltyPercent = _earlyWithdrawPenaltyPercent;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        stakingPoolStartTime = block.timestamp;
+        stakingPoolStartBlock = block.number;
         emit JudgeTokenAddressWasSet(_judgeTokenAddress);
         emit EarlyWithdrawPenaltyPercentInitialized(_earlyWithdrawPenaltyPercent);
     }
@@ -150,7 +150,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function getCurrentQuarterIndex()public view returns(uint256){
-        return (block.timestamp - stakingPoolStartTime) / 90 days + 1;
+        return (block.number - stakingPoolStartBlock) / 648_000 + 1;
     }
 
     function calculateCurrentRewardsPerBlock()public returns(uint256){
@@ -161,20 +161,18 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         require (totalRewards >= totalRewardsPaidinCurrentQuarter, OverPaidRewards());
         uint256 remainingRewards = totalRewards - totalRewardsPaidinCurrentQuarter;
 
-        uint256 quarterStart = stakingPoolStartTime + (currentQuarterIndex-1) * 90 days;
-        uint256 quarterEnd = quarterStart + 90 days;
+        uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex-1) * 648_000;
+        uint256 quarterEnd = quarterStart + 648_000;
 
-        if(block.timestamp > quarterEnd){
+        if(block.number > quarterEnd){
             return 0;
         }
 
-        uint256 remainingTime = quarterEnd - block.timestamp;
-        uint8 sepoliaBlockTime = 12 seconds;
-        uint256 numberOfBlocksLeft = remainingTime / sepoliaBlockTime;
-        if(numberOfBlocksLeft== 0){
+        uint256 remainingBlocks = quarterEnd - block.number;
+        if(remainingBlocks == 0){
             return 0;
         }
-      rewardsPerBlock = remainingRewards / uint256(numberOfBlocksLeft);
+      rewardsPerBlock = remainingRewards / remainingBlocks;
       return rewardsPerBlock;
     }
 
@@ -207,7 +205,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             return;
         }
         uint256 blocksPassed = block.number - lastRewardBlock;
-        uint256 totalReward = blocksPassed * calculateCurrentRewardsPerBlock();
+        uint256 totalReward = blocksPassed * rewardsPerBlock;
         accJudgePerShare += Math.mulDiv(totalReward, SCALE, totalCalculatedStakeForReward);
         lastRewardBlock = block.number;
     }
@@ -237,8 +235,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         updatePool();
         uint256 rewardDebt = Math.mulDiv(calculatedStakeForReward, accJudgePerShare, SCALE);
-        
-       
 
         userStake memory newStake = userStake({
             id: newStakeId,

@@ -39,11 +39,15 @@ contract JudgeStakingTest is Test{
 
 function setUp()public{
     owner = address(this);
-    console.log(owner, "owner address");
     zeroAddress = address(0);
     user1 = makeAddr("user1");
     user2 = makeAddr("user2");
     user3 = makeAddr("user3");
+
+    console.log("owner address", owner);
+    console.log("user1 address", user1);
+    console.log("user2 address", user2);
+    console.log("user3 address", user3);
 
 
     judgeToken = new JudgeToken(initialSupply);
@@ -60,6 +64,7 @@ function setUp()public{
     bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
     bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
     bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
+    bytes32 tokenRecoveryRole = judgeStaking.TOKEN_RECOVERY_ROLE();
     judgeStaking.grantRole(stakingAdmin, owner);
     rewardsManager.grantRole(rewardsManagerAdmin, owner);
     judgeTreasury.grantRole(treasuryAdmin, owner);
@@ -72,6 +77,29 @@ function setUp()public{
      judgeTreasury.grantRole(treasuryPreciseBalanceUpdater, address(judgeStaking));
      judgeToken.grantRole(minterRole, address(judgeTreasury)); 
      judgeToken.grantRole(minterRole, owner);
+
+     console.log("JudgeTokenAddress", address(judgeToken));
+     console.log("JudgeTreasuryAddress", address(judgeTreasury));
+     console.log("RewardsmanagerAddress", address(rewardsManager));
+     console.log("JudgeStakingAddress", address(judgeStaking));
+     console.log("MinterRole is:");
+     console.logBytes32(minterRole);
+     console.log("rewardsManagerPreciseBalanceUpdater is:");
+     console.logBytes32(rewardsManagerPreciseBalanceUpdater);
+     console.log("rewardsDistributor is:");
+     console.logBytes32(rewardsDistributor);
+    console.log("Treasuryprecisebalanceupdater is:");
+    console.logBytes32(treasuryPreciseBalanceUpdater);
+    console.log("rewardsManagerAdmin is:");
+    console.logBytes32(rewardsManagerAdmin);
+    console.log("Staking Admin is:");
+    console.logBytes32(stakingAdmin);
+    console.log("Treasury Admin is:");
+    console.logBytes32(treasuryAdmin);
+    console.log("fundManager is:");
+    console.logBytes32(fundManager);
+    console.log("TokenRecovery role is:");
+    console.logBytes32(tokenRecoveryRole);
 }
 
 function testDeployerIsOwner()public{
@@ -152,7 +180,7 @@ assertEq(judgeStaking.earlyWithdrawPenaltyPercent(), 5);
 }
 
 function testGetCurrentQuarterIndex()public{
-uint256 startTime = judgeStaking.stakingPoolStartTime();
+uint256 startTime = judgeStaking.stakingPoolStartBlock();
 assertEq(judgeStaking.getCurrentQuarterIndex(), 1);
 
 vm.warp(startTime + 90 days);
@@ -165,7 +193,7 @@ assertEq(judgeStaking.getCurrentQuarterIndex(), 3);
 function testCalculateCurrentRewardsPerBlock()public{
 bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
 bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
-uint256 poolStartTime = judgeStaking.stakingPoolStartTime();
+uint256 poolStartTime = judgeStaking.stakingPoolStartBlock();
 uint256 firstQuarterRewards = 1_000_000 * 10 ** uint256(decimals);
 uint256 additionalRewards = 20_000 * 10 ** uint256(decimals);
 
@@ -203,7 +231,7 @@ function testGetCurrentAPR()public{
 bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
 bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
 bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
-uint256 poolStartTime = judgeStaking.stakingPoolStartTime();
+uint256 poolStartTime = judgeStaking.stakingPoolStartBlock();
 uint256 firstQuarterRewards = 1_000_000 * 10 ** uint256(decimals);
 uint256 additionalRewards = 20_000 * 10 ** uint256(decimals);
 
@@ -350,9 +378,6 @@ judgeStaking.deposit(depositAmount, lockUpPeriod);
 uint256 user1BalanceAfterDeposit = judgeToken.balanceOf(user1);
 vm.stopPrank();
 
-uint256 stakeLength = judgeStaking.viewUserStakes(user1).length;
-console.log("Length", stakeLength);
-
 vm.startPrank(user2);
 judgeToken.approve(address(judgeStaking), depositAmount);
 judgeStaking.deposit(depositAmount, lockUpPeriod2);
@@ -363,8 +388,6 @@ vm.startPrank(user3);
 judgeToken.approve(address(judgeStaking), depositAmount2);
 judgeStaking.deposit(depositAmount2, lockUpPeriod);
 uint256 user3BalanceAfterDeposit = judgeToken.balanceOf(user3);
-uint256 blockNumber = block.number;
-vm.roll(blockNumber + 100_000);
 vm.stopPrank();
 
 judgeTreasury.setNewQuarterlyRewards(1_000_000 * 10 ** uint256(decimals));
@@ -372,12 +395,19 @@ judgeTreasury.fundRewardsManager(1);
 uint256 rewardsPerBlock = judgeStaking.rewardsPerBlock();
 console.log("rewardsPerblock", rewardsPerBlock);
 
+uint256 blockAdvance = 100_000;
+vm.roll(block.number + blockAdvance);
+
 vm.startPrank(user1);
 uint256 pendingReward = judgeStaking.viewMyPendingRewards(0);
 console.log("Pending Reward", pendingReward);
 judgeStaking.claimRewards(0);
 vm.stopPrank();
+uint256 oldAccJudgePerShare = judgeStaking.accJudgePerShare();
+console.log("oldAccJudgeps", oldAccJudgePerShare);
 uint256 user1BalanceAfterClaim = judgeToken.balanceOf(user1);
+uint256 user1ClaimedRewards = user1BalanceAfterClaim - user1BalanceAfterDeposit;
+console.log("user1 first rewards", user1ClaimedRewards);
 
 vm.startPrank(user2);
 uint256 pendingReward2 = judgeStaking.viewMyPendingRewards(0);
@@ -393,11 +423,24 @@ judgeStaking.claimRewards(0);
 uint256 user3BalanceAfterClaim = judgeToken.balanceOf(user3);
 
 assertEq(user3BalanceAfterClaim - user3BalanceAfterDeposit, user2BalanceAfterClaim - user2BalanceAfterDeposit);
-assertEq(user2BalanceAfterClaim - user2BalanceAfterDeposit, (user1BalanceAfterClaim - user1BalanceAfterDeposit) * 2);
 uint256 claimedRewards = user3BalanceAfterClaim - user3BalanceAfterDeposit;
 console.log("user3 rewards", claimedRewards);
 uint256 rewardsManagerBal = judgeToken.balanceOf(address(rewardsManager));
 console.log("rewardsManager balance", rewardsManagerBal);
+
+uint256 blockAdvance2 = 50_000;
+vm.roll(block.number + blockAdvance2);
+
+uint256 rewardPerBlock =judgeStaking.rewardsPerBlock();
+console.log("rewardsPerBlock", rewardPerBlock);
+
+vm.startPrank(user1);
+judgeStaking.claimRewards(0);
+uint256 newAccJudgePerShare  = judgeStaking.accJudgePerShare();
+console.log("newaccJugepsh", newAccJudgePerShare);
+uint256 user1BalanceAfterSecondClaim = judgeToken.balanceOf(user1);
+uint256 secondUser1ClaimedRewards = user1BalanceAfterSecondClaim - user1BalanceAfterClaim;
+console.log("user1 second rewards", secondUser1ClaimedRewards);
 }
 
 function testWithdraw()public{

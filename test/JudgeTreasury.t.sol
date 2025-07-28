@@ -156,7 +156,7 @@ assertEq(judgeTreasury.quarterlyRewards(2), secondQuarterRewards);
 
 function testAddToQuarterReward()public{
 bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
-uint256 stakingStart = judgeStaking.stakingPoolStartTime();
+uint256 stakingStart = judgeStaking.stakingPoolStartBlock();
 uint256 firstQuarterRewards = 1_000_000 * 10 ** uint256(decimals);
 uint256 secondQuarterRewards = 1_250_000 * 10 ** uint256(decimals);
 uint256 additionalRewards = 20_000 * 10 ** uint256(decimals);
