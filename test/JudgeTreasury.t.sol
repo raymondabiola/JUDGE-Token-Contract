@@ -154,7 +154,7 @@ assertEq(judgeTreasury.quarterlyRewards(1), firstQuarterRewards);
 assertEq(judgeTreasury.quarterlyRewards(2), secondQuarterRewards);
 }
 
-function testAddToQuarterReward()public{
+function testAddBonusToQuarterReward()public{
 bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
 uint256 stakingStart = judgeStaking.stakingPoolStartBlock();
 uint256 firstQuarterRewards = 1_000_000 * 10 ** uint256(decimals);
@@ -162,7 +162,7 @@ uint256 secondQuarterRewards = 1_250_000 * 10 ** uint256(decimals);
 uint256 additionalRewards = 20_000 * 10 ** uint256(decimals);
 uint256 invalidRewards;
 uint256 q1Start = stakingStart;
-uint256 q2Start = stakingStart + 90 days;
+uint256 q2Start = stakingStart + 648_000;
 
 judgeTreasury.grantRole(fundManager, owner);
 
@@ -171,21 +171,21 @@ judgeTreasury.setNewQuarterlyRewards(firstQuarterRewards);
 judgeTreasury.setNewQuarterlyRewards(secondQuarterRewards);
 
 vm.expectRevert(InvalidAmount.selector);
-judgeTreasury.addToQuarterReward(invalidRewards);
+judgeTreasury.addBonusToQuarterReward(invalidRewards, 100_000);
 vm.expectRevert(CurrentQuarterAllocationNotYetFunded.selector);
-judgeTreasury.addToQuarterReward(additionalRewards);
+judgeTreasury.addBonusToQuarterReward(additionalRewards, 100_000);
 
 judgeToken.approve(address(judgeTreasury), 40_000 * 10 ** uint256(decimals));
 vm.warp(q1Start);
 judgeTreasury.fundRewardsManager(1);
-judgeTreasury.addToQuarterReward(additionalRewards);
+judgeTreasury.addBonusToQuarterReward(additionalRewards, 100_000);
 
 assertEq(judgeToken.balanceOf(address(rewardsManager)), 1_020_000 * 10 ** uint256(decimals));
 assertEq(judgeToken.balanceOf(owner), 80_000 * 10 ** uint256(decimals));
 
-vm.warp(q2Start);
+vm.roll(q2Start);
 judgeTreasury.fundRewardsManager(2);
-judgeTreasury.addToQuarterReward(additionalRewards);
+judgeTreasury.addBonusToQuarterReward(additionalRewards, 100_000);
 
 assertEq(judgeToken.balanceOf(address(rewardsManager)), 2_290_000 * 10 ** uint256(decimals));
 assertEq(judgeToken.balanceOf(owner), 60_000 * 10 ** uint256(decimals));

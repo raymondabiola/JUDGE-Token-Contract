@@ -27,6 +27,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30; 
     uint256 public judgeRecoveryMinimumThreshold;
     uint256 public rewardsManagerPreciseBalance;
+    uint256 public rewardsManagerBonusBalance;
 
     mapping(address => uint256) public feeBalanceOfStrandedToken;
 
@@ -77,6 +78,10 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         rewardsManagerPreciseBalance += _amount;
     }
 
+    function increaseRewardsManagerBonusBalance(uint256 _amount) external onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER){
+        rewardsManagerBonusBalance += _amount;
+    }
+
     function setKeyParameter(address _judgeTreasuryAddress) external validAddress(_judgeTreasuryAddress) notSelf(_judgeTreasuryAddress) onlyRole(REWARDS_MANAGER_ADMIN_ROLE) {
         require(_judgeTreasuryAddress.code.length > 0, EOANotAllowed());
         
@@ -100,10 +105,17 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
 
     // Grant the rewards distributor role to the judge staking contract in the deployment script.
     function sendRewards(address _addr, uint256 _amount) external onlyRole(REWARDS_DISTRIBUTOR_ROLE) validAddress(_addr) nonReentrant {
-        require(_amount <= judgeToken.balanceOf(address(this)), InsufficientContractBalance());
+        require(_amount <= rewardsManagerPreciseBalance, InsufficientBalance());
         judgeToken.safeTransfer(_addr, _amount);
         totalRewardsPaid += _amount;
         rewardsManagerPreciseBalance -= _amount;
+    }
+
+    function sendBonus(address _addr, uint256 _amount) external onlyRole(REWARDS_DISTRIBUTOR_ROLE) validAddress(_addr) nonReentrant{
+        require(_amount <= rewardsManagerBonusBalance, InsufficientBalance());
+        judgeToken.safeTransfer(_addr, _amount);
+        totalRewardsPaid += _amount;
+        rewardsManagerBonusBalance -= _amount;
     }
 
     function adminWithdrawal(address _to, uint256 _amount) external validAddress(_to) validAmount(_amount) notSelf(_to) onlyRole(FUND_MANAGER_ROLE) nonReentrant{
@@ -122,7 +134,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
 
     function calculateMisplacedJudge() public view onlyRole(TOKEN_RECOVERY_ROLE) returns (uint256) {
         uint256 contractBalance = judgeToken.balanceOf(address(this));
-        uint256 misplacedJudgeAmount = contractBalance - rewardsManagerPreciseBalance;
+        uint256 misplacedJudgeAmount = contractBalance - rewardsManagerPreciseBalance - rewardsManagerBonusBalance;
         return misplacedJudgeAmount;
     }
 
