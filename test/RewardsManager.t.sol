@@ -52,9 +52,14 @@ contract RewardsManagerTest is Test{
     bytes32 minterRole = judgeToken.MINTER_ROLE();
     bytes32 rewardsManagerPrecisebalanceUpdater = rewardsManager.REWARDS_MANAGER_PRECISE_BALANCE_UPDATER();
     bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
+    bytes32 rewardsPerBlockAdmin = judgeStaking.REWARDS_PER_BLOCK_CALCULATOR();
+    bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
     rewardsManager.grantRole(rewardsManagerPrecisebalanceUpdater, address(judgeTreasury));
     judgeToken.grantRole(minterRole, address(judgeTreasury));
     judgeTreasury.grantRole(treasuryAdmin, owner);
+    judgeStaking.grantRole(stakingAdmin, owner);
+    judgeStaking.grantRole(rewardsPerBlockAdmin, address(judgeTreasury));
+    judgeStaking.setKeyParameters(address(rewardsManager), address(judgeTreasury));
     
     sampleERC20 = new SampleERC20();
     }

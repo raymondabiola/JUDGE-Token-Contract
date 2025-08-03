@@ -184,48 +184,43 @@ assertEq(judgeStaking.earlyWithdrawPenaltyPercent(), 5);
 }
 
 function testGetCurrentQuarterIndex()public{
-uint256 startTime = judgeStaking.stakingPoolStartBlock();
+uint256 startBlock = judgeStaking.stakingPoolStartBlock();
 assertEq(judgeStaking.getCurrentQuarterIndex(), 1);
 
-vm.warp(startTime + 90 days);
+vm.roll(startBlock + 648_000);
 assertEq(judgeStaking.getCurrentQuarterIndex(), 2);
 
-vm.warp(startTime + 180 days);
+vm.roll(startBlock + 1_296_000);
 assertEq(judgeStaking.getCurrentQuarterIndex(), 3);
 }
 
 function testCalculateCurrentRewardsPerBlock()public{
 bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
 bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
+bytes32 rewardsPerBlockAdmin = judgeStaking.REWARDS_PER_BLOCK_CALCULATOR();
 uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
 uint256 firstQuarterRewards = 1_000_000 * 10 ** uint256(decimals);
 
 judgeToken.approve(address(judgeTreasury), 40_000 * 10 ** uint256(decimals));
 judgeTreasury.grantRole(treasuryAdmin, owner);
 judgeTreasury.grantRole(fundManager, owner);
+judgeStaking.grantRole(rewardsPerBlockAdmin, address(judgeTreasury));
 
-vm.warp(poolStartBlock);
+vm.roll(poolStartBlock);
 judgeTreasury.setNewQuarterlyRewards(firstQuarterRewards);
 judgeTreasury.fundRewardsManager(1);
 uint256 totalRewards = firstQuarterRewards;
-uint256 assumedTotalCurrentQuarterRewardspaid1 = 1_000_001 * 10 ** uint256(decimals);
-uint256 assumedTotalCurrentQuarterRewardspaid2 = 400_000 * 10 ** uint256(decimals);
-uint256 baseSlotQuarterlyRewardsPaid = 21;
-bytes32 firstQuarterRewardsPaidSlot = keccak256(abi.encode(1, uint256(baseSlotQuarterlyRewardsPaid)));
-vm.store(address(judgeStaking), firstQuarterRewardsPaidSlot, bytes32(assumedTotalCurrentQuarterRewardspaid1));
 
-vm.expectRevert(OverPaidRewards.selector);
-judgeStaking.calculateCurrentRewardsPerBlock();
-
-vm.roll(poolStartBlock + 288_000);
-vm.store(address(judgeStaking), firstQuarterRewardsPaidSlot, bytes32(assumedTotalCurrentQuarterRewardspaid2));
-uint256 remainingRewards = totalRewards - assumedTotalCurrentQuarterRewardspaid2;
-uint256 remainingTime = 50 days;
-uint256 numberOfBlocksLeft = remainingTime / 12;
+uint256 remainingRewards = totalRewards - judgeStaking.quarterAccruedRewardsForStakes(1);
+uint256 lastRewardBlock = judgeStaking.lastRewardBlock();
+uint256 quarterEnd = poolStartBlock + 648_000;
+uint256 numberOfBlocksLeft = quarterEnd - lastRewardBlock;
 uint256 rewardPerBlock = remainingRewards / numberOfBlocksLeft;
-assertEq(judgeStaking.calculateCurrentRewardsPerBlock(), rewardPerBlock);
+vm.prank(address(judgeTreasury));
+assertEq(judgeStaking.rewardsPerBlock(), rewardPerBlock);
 
 vm.roll(poolStartBlock + 655_200);
+vm.prank(address(judgeTreasury));
 assertEq(judgeStaking.calculateCurrentRewardsPerBlock(), 0);
 }
 
@@ -245,23 +240,19 @@ vm.roll(poolStartBlock);
 judgeTreasury.setNewQuarterlyRewards(firstQuarterRewards);
 judgeTreasury.fundRewardsManager(1);
 
-uint256 assumedTotalStaked = 10_000_000 * 10 ** uint256(decimals);
+uint256 assumedTotalStakeWeight = 10_000_000 * 10 ** uint256(decimals);
 uint256 rewardsPerBlock = judgeStaking.rewardsPerBlock();
-vm.store(address(judgeStaking), bytes32(uint256(12)), bytes32(assumedTotalStaked));
-uint256 apr1 = (rewardsPerBlock * 365 days / 12 * 1e18) / judgeStaking.totalStaked();
+vm.store(address(judgeStaking), bytes32(uint256(12)), bytes32(assumedTotalStakeWeight));
+uint256 blocksPerYear = 365 days / 12;
+uint256 apr1 = (rewardsPerBlock * blocksPerYear * 1e18) / judgeStaking.totalStakeWeight();
 
 assertEq(judgeStaking.getCurrentAPR(), apr1);
-
-uint256 assumedTotalCurrentQuarterRewardspaid1 = 400_000 * 10 ** uint256(decimals);
-uint256 baseSlotQuarterlyRewardsPaid = 21;
-bytes32 firstQuarterRewardsPaidSlot = keccak256(abi.encode(1, uint256(baseSlotQuarterlyRewardsPaid)));
 
 vm.roll(poolStartBlock + 255_000);
 judgeToken.approve(address(judgeTreasury), 40_000 * 10 ** uint256(decimals));
 judgeTreasury.addBonusToQuarterReward(additionalRewards, 100_000);
-vm.store(address(judgeStaking), firstQuarterRewardsPaidSlot, bytes32(assumedTotalCurrentQuarterRewardspaid1));
 uint256 bonusRewardsPerBlock = judgeStaking.bonusPerBlock();
-uint256 apr2 = (bonusRewardsPerBlock * 365 days / 12 * 1e18) / judgeStaking.totalStaked();
+uint256 apr2 = (bonusRewardsPerBlock * blocksPerYear * 1e18) / judgeStaking.totalStakeWeight();
 assertEq(judgeStaking.getCurrentAPR(), apr1 + apr2);
 }
 
