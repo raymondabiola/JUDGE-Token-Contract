@@ -364,6 +364,7 @@ uint256 amount2 = 150_000 * 10 ** uint256(decimals);
 uint256 depositAmount2 = 80_000 * 10 ** uint256(decimals);
 uint32 lockUpPeriod = 180;
 uint32 lockUpPeriod2 = 360;
+uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
 judgeToken.mint(user1, amount);
 judgeToken.mint(user2, amount);
 judgeToken.mint(user3, amount2);
@@ -371,6 +372,8 @@ judgeToken.mint(user3, amount2);
 vm.startPrank(user1);
 vm.expectRevert(InvalidIndex.selector);
 judgeStaking.claimRewards(0);
+
+vm.roll(poolStartBlock);
 judgeToken.approve(address(judgeStaking), depositAmount);
 judgeStaking.deposit(depositAmount, lockUpPeriod);
 uint256 user1BalanceAfterDeposit = judgeToken.balanceOf(user1);
@@ -393,8 +396,7 @@ judgeTreasury.fundRewardsManager(1);
 uint256 rewardsPerBlock = judgeStaking.rewardsPerBlock();
 console.log("rewardsPerblock", rewardsPerBlock);
 
-uint256 blockAdvance = 100_000;
-vm.roll(block.number + blockAdvance);
+vm.roll(poolStartBlock + 100_000);
 console.log("blockcount1", block.number);
 
 vm.prank(user1);
@@ -423,8 +425,7 @@ assertEq(user3BalanceAfterFirstClaim - user3BalanceAfterDeposit, user2BalanceAft
 uint256 rewardsManagerBal = judgeToken.balanceOf(address(rewardsManager));
 console.log("rewardsManager balance", rewardsManagerBal);
 
-uint256 blockAdvance2 = 50_000;
-vm.roll(block.number + blockAdvance2);
+vm.roll(poolStartBlock + 150_000);
 console.log("blockcount2", block.number);
 
 uint256 rewardPerBlock = judgeStaking.rewardsPerBlock();
@@ -448,57 +449,123 @@ judgeStaking.claimRewards(0);
 uint256 user2BalanceAfterSecondClaim = judgeToken.balanceOf(user2);
 logRewards(user2, user2BalanceAfterSecondClaim, user2BalanceAfterFirstClaim, "user2 second rewards");
 
-uint256 blockAdvance3 = 50_000;
-vm.roll(block.number + blockAdvance3);
-console.log("blockcount3", block.number);
+}
+
+function testClaimRewardsAfterAddingBonus()public{
+uint256 amount = 100_000 * 10 ** uint256(decimals);
+uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
+uint256 amount2 = 150_000 * 10 ** uint256(decimals);
+uint256 depositAmount2 = 80_000 * 10 ** uint256(decimals);
+uint32 lockUpPeriod = 180;
+uint32 lockUpPeriod2 = 360;
+uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
+judgeToken.mint(user1, amount);
+judgeToken.mint(user2, amount);
+judgeToken.mint(user3, amount2);
+
+vm.startPrank(user1);
+vm.expectRevert(InvalidIndex.selector);
+judgeStaking.claimRewards(0);
+
+vm.roll(poolStartBlock);
+judgeToken.approve(address(judgeStaking), depositAmount);
+judgeStaking.deposit(depositAmount, lockUpPeriod);
+uint256 user1BalanceAfterDeposit = judgeToken.balanceOf(user1);
+vm.stopPrank();
+
+vm.startPrank(user2);
+judgeToken.approve(address(judgeStaking), depositAmount);
+judgeStaking.deposit(depositAmount, lockUpPeriod2);
+uint256 user2BalanceAfterDeposit = judgeToken.balanceOf(user2);
+vm.stopPrank();
+
+judgeTreasury.setNewQuarterlyRewards(1_000_000 * 10 ** uint256(decimals));
+judgeTreasury.fundRewardsManager(1);
+uint256 rewardsPerBlock = judgeStaking.rewardsPerBlock();
+console.log("rewardsPerblock", rewardsPerBlock);
+
+vm.roll(poolStartBlock + 100_000);
+console.log("blockcount1", block.number);
+
+vm.prank(user1);
+judgeStaking.claimRewards(0);
+
+uint256 accJudgePerShareAfter100kBlocks = judgeStaking.accJudgePerShare();
+console.log("AccJudgePerShareAfter100kBlocks", accJudgePerShareAfter100kBlocks);
+uint256 user1BalanceAfterFirstClaim = judgeToken.balanceOf(user1);
+logRewards(user1, user1BalanceAfterFirstClaim, user1BalanceAfterDeposit, "user1 first rewards");
+
+vm.prank(user2);
+judgeStaking.claimRewards(0);
+
+uint256 user2BalanceAfterFirstClaim = judgeToken.balanceOf(user2);
+logRewards(user2, user2BalanceAfterFirstClaim, user2BalanceAfterDeposit, "user2 first rewards");
 
 uint newMintAmount = 500_000 * 10 ** uint256(decimals);
 judgeToken.mint(owner, newMintAmount);
 judgeToken.approve(address(judgeTreasury), newMintAmount);
 judgeTreasury.addBonusToQuarterReward(newMintAmount, 100_000);
 
-uint256 totalAccruedReward = judgeStaking.quarterAccruedRewardsForStakes(judgeStaking.getCurrentQuarterIndex());
-console.log("totalAccruedReward", totalAccruedReward);
+vm.startPrank(user3);
+judgeToken.approve(address(judgeStaking), depositAmount2);
+judgeStaking.deposit(depositAmount2, lockUpPeriod);
+uint256 user3BalanceAfterDeposit = judgeToken.balanceOf(user3);
+vm.stopPrank();
+
+vm.roll(poolStartBlock + 200_000);
+console.log("blockcount2", block.number);
 
 uint256 newRewardsPerBlock = judgeStaking.rewardsPerBlock();
 console.log("newRewardsPerBlock", newRewardsPerBlock);
 
 uint256 accumuJudgePershare = judgeStaking.accJudgePerShare();
 console.log("AccumuJudgePerBeforeThirdClaim", accumuJudgePershare);
-uint256 user1RewardDebt = judgeStaking.viewUserStakeAtIndex(user1, 0).rewardDebt;
-console.log("user1 reward debt", user1RewardDebt);
+
+uint256 bonusRewardPerBlock = judgeStaking.bonusPerBlock();
+console.log("BonusRewardPerBlock", bonusRewardPerBlock);
+
+uint256 accBonusJudgePerShare = judgeStaking.accBonusJudgePerShare();
+console.log("AccBonusJudgePerShareBeforeSecondClaim", accBonusJudgePerShare);
 
 vm.prank(user1);
 judgeStaking.claimRewards(0);
 
 uint256 accumuJudgePershareAfterClaim = judgeStaking.accJudgePerShare();
-console.log("AccumuJudgePerShareAfterThirdClaim", accumuJudgePershareAfterClaim);
+console.log("AccumuJudgePerShareAfterSecondClaim", accumuJudgePershareAfterClaim);
 
-uint256 user1BalanceAfterThirdClaim = judgeToken.balanceOf(user1);
-logRewards(user1, user1BalanceAfterThirdClaim, user1BalanceAfterSecondClaim, "user1 third rewards");
+uint256 accBonusJudgePerShareAfterClaim = judgeStaking.accBonusJudgePerShare();
+console.log("AccBonusJudgePerShareAfterSecondClaim", accBonusJudgePerShareAfterClaim);
+
+uint256 user1BalanceAfterSecondClaim = judgeToken.balanceOf(user1);
+logRewards(user1, user1BalanceAfterSecondClaim, user1BalanceAfterFirstClaim, "user1 second rewards");
 
 vm.prank(user2);
 judgeStaking.claimRewards(0);
 
-uint256 user2BalanceAfterThirdClaim = judgeToken.balanceOf(user2);
-logRewards(user2, user2BalanceAfterThirdClaim, user2BalanceAfterSecondClaim, "user2 third rewards");
+uint256 user2BalanceAfterSecondClaim = judgeToken.balanceOf(user2);
+logRewards(user2, user2BalanceAfterSecondClaim, user2BalanceAfterFirstClaim, "user2 second rewards");
 
 vm.prank(user3);
 judgeStaking.claimRewards(0);
+uint256 user3BalanceAfterFirstClaim = judgeToken.balanceOf(user3);
+logRewards(user3, user3BalanceAfterFirstClaim, user3BalanceAfterDeposit, "user3 first rewards");
 }
 
-function testClaimByUser3After200kBlocks()public{
-   uint256 amount = 100_000 * 10 ** uint256(decimals);
+function testClaimRewardsInSecondQuarter()public{
+uint256 amount = 100_000 * 10 ** uint256(decimals);
 uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
 uint256 amount2 = 150_000 * 10 ** uint256(decimals);
 uint256 depositAmount2 = 80_000 * 10 ** uint256(decimals);
 uint32 lockUpPeriod = 180;
 uint32 lockUpPeriod2 = 360;
+uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
 judgeToken.mint(user1, amount);
 judgeToken.mint(user2, amount);
 judgeToken.mint(user3, amount2);
 
 vm.startPrank(user1);
+
+vm.roll(poolStartBlock);
 judgeToken.approve(address(judgeStaking), depositAmount);
 judgeStaking.deposit(depositAmount, lockUpPeriod);
 vm.stopPrank();
@@ -508,51 +575,63 @@ judgeToken.approve(address(judgeStaking), depositAmount);
 judgeStaking.deposit(depositAmount, lockUpPeriod2);
 vm.stopPrank();
 
+judgeTreasury.setNewQuarterlyRewards(1_000_000 * 10 ** uint256(decimals));
+judgeTreasury.setNewQuarterlyRewards(500_000 * 10 ** uint256(decimals));
+judgeTreasury.fundRewardsManager(1);
+judgeTreasury.fundRewardsManager(2);
+
+vm.roll(poolStartBlock + 100_000);
+console.log("blockcount1", block.number);
+
+vm.prank(user1);
+judgeStaking.claimRewards(0);
+
+vm.prank(user2);
+judgeStaking.claimRewards(0);
+
+uint256 newMintAmount = 500_000 * 10 ** uint256(decimals);
+uint256 firstBonus = 200_000 * 10 ** uint256(decimals);
+judgeToken.mint(owner, newMintAmount);
+judgeToken.approve(address(judgeTreasury), newMintAmount);
+judgeTreasury.addBonusToQuarterReward(firstBonus, 100_000);
+
 vm.startPrank(user3);
 judgeToken.approve(address(judgeStaking), depositAmount2);
 judgeStaking.deposit(depositAmount2, lockUpPeriod);
-uint256 user3BalanceAfterDeposit = judgeToken.balanceOf(user3);
 vm.stopPrank();
 
-judgeTreasury.setNewQuarterlyRewards(1_000_000 * 10 ** uint256(decimals));
-judgeTreasury.fundRewardsManager(1);
-uint256 rewardsPerBlock = judgeStaking.rewardsPerBlock();
-console.log("rewardsPerblock", rewardsPerBlock);
+vm.roll(poolStartBlock + 648_000);
+console.log("blockcount2", block.number);
 
-uint256 blockAdvance = 100_000;
-vm.roll(block.number + blockAdvance);
-console.log("blockcount1", block.number);
+vm.prank(user1);
+judgeStaking.claimRewards(0);
+uint256 user1BalanceBeforeEndOfFirstQuarter = judgeToken.balanceOf(user1);
+
+vm.prank(user2);
+judgeStaking.claimRewards(0);
+uint256 user2BalanceBeforeEndOfFirstQuarter = judgeToken.balanceOf(user2);
 
 vm.prank(user3);
 judgeStaking.claimRewards(0);
+uint256 user3BalanceBeforeEndOfFirstQuarter = judgeToken.balanceOf(user3);
 
-uint256 user3BalanceAfterFirstClaim = judgeToken.balanceOf(user3);
-logRewards(user3, user3BalanceAfterFirstClaim, user3BalanceAfterDeposit, "user3 first Rewards");
+uint256 secondBonus = 300_000 * 10 ** uint256(decimals);
+judgeTreasury.addBonusToQuarterReward(secondBonus, 100_000);
+vm.roll(poolStartBlock + 698_000);
+vm.prank(user1);
+judgeStaking.claimRewards(0);
+uint256 user1BalanceinSecondQuarter = judgeToken.balanceOf(user1);
+logRewards(user1, user1BalanceinSecondQuarter, user1BalanceBeforeEndOfFirstQuarter, "user1 second quarter rewards");
 
-uint256 blockAdvance2 = 50_000;
-vm.roll(block.number + blockAdvance2);
-console.log("blockcount2", block.number);
-
-uint256 blockAdvance3 = 50_000;
-vm.roll(block.number + blockAdvance3);
-console.log("blockcount3", block.number);
-
-uint newMintAmount = 500_000 * 10 ** uint256(decimals);
-judgeToken.mint(owner, newMintAmount);
-judgeToken.approve(address(judgeTreasury), newMintAmount);
-judgeTreasury.addBonusToQuarterReward(newMintAmount, 100_000);
-
-uint256 accumuJudgePershare = judgeStaking.accJudgePerShare();
-console.log("AccumuJudgePerBeforeThirdClaim", accumuJudgePershare);
+vm.prank(user2);
+judgeStaking.claimRewards(0);
+uint256 user2BalanceinSecondQuarter = judgeToken.balanceOf(user2);
+logRewards(user2, user2BalanceinSecondQuarter, user2BalanceBeforeEndOfFirstQuarter, "user2 second quarter rewards");
 
 vm.prank(user3);
-judgeStaking.claimRewards(0); 
-
-uint256 accumuJudgePershare2 = judgeStaking.accJudgePerShare();
-console.log("AccumuJudgePerAfterThirdClaim", accumuJudgePershare2);
-
-uint256 user3BalanceAfterSecondClaim = judgeToken.balanceOf(user3);
-logRewards(user3, user3BalanceAfterSecondClaim, user3BalanceAfterFirstClaim, "user3 second rewards");
+judgeStaking.claimRewards(0);
+uint256 user3BalanceinSecondQuarter = judgeToken.balanceOf(user3);
+logRewards(user3, user3BalanceinSecondQuarter, user3BalanceBeforeEndOfFirstQuarter, "user3 second quarter rewards");
 }
 
 function testWithdraw()public{
