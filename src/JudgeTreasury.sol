@@ -130,6 +130,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         additionalQuarterRewards[currentQuarterIndex] += _bonus;
         judgeToken.safeTransferFrom(msg.sender, address(rewardsManager), _bonus);
         rewardsManager.increaseRewardsManagerBonusBalance(_bonus);
+        judgeStaking.updatePool();
         judgeStaking.calculateBonusRewardsPerBlock(_bonus, _durationInBlocks);
         bonusEndBlock = block.number + _durationInBlocks;
     }
@@ -162,6 +163,8 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         rewardsManager.increaseRewardsManagerPreciseBalance(rewardAmount);
 
         setQuarterlyRewardsAtIndexWasPaidToRewardsManager[_index] = true;
+
+        judgeStaking.updatePool();
 
         judgeStaking.calculateCurrentRewardsPerBlock();
 

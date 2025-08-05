@@ -318,15 +318,15 @@ vm.expectRevert(InvalidLockUpPeriod.selector);
 judgeStaking.deposit(depositAmount, higherThanMaxLockUpPeriod);
 
 judgeToken.approve(address(judgeStaking), depositAmount);
-uint256 timeStamp = block.timestamp;
+uint256 blockNumber = block.number;
 judgeStaking.deposit(depositAmount, lockUpPeriod);
 vm.stopPrank();
 uint256 accJudgePerShare = judgeStaking.accJudgePerShare();
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).id, 1);
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).amountStaked, depositAmount);
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).lockUpPeriod, lockUpPeriod);
-assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).depositTimestamp, timeStamp);
-assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).maturityTimestamp, timeStamp + lockUpPeriod);
+assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).depositBlockNumber, blockNumber);
+assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).maturityBlockNumber, blockNumber + (lockUpPeriod*7200));
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).stakeWeight, depositAmount/2);
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).lockUpRatio, Math.mulDiv(lockUpPeriod, 1e18, 360));
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 0).rewardDebt, Math.mulDiv(depositAmount/2 , accJudgePerShare, 1e18));
@@ -335,7 +335,7 @@ assertEq(judgeToken.balanceOf(user1), amount - depositAmount);
 
 vm.startPrank(user1);
 judgeToken.approve(address(judgeStaking), depositAmount2);
-uint256 timeStamp2 = block.timestamp;
+uint256 blockNumber2 = block.number;
 judgeStaking.deposit(depositAmount2, lockUpPeriod2);
 
 vm.stopPrank();
@@ -343,8 +343,8 @@ uint256 accJudgePerShare2 = judgeStaking.accJudgePerShare();
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).id, 2);
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).amountStaked, depositAmount2);
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).lockUpPeriod, lockUpPeriod2);
-assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).depositTimestamp, timeStamp2);
-assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).maturityTimestamp, timeStamp2 + lockUpPeriod2);
+assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).depositBlockNumber, blockNumber2);
+assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).maturityBlockNumber, blockNumber2 + (lockUpPeriod2 * 7200));
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).stakeWeight, depositAmount2);
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).lockUpRatio, Math.mulDiv(lockUpPeriod2, 1e18, 360));
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).rewardDebt, Math.mulDiv(depositAmount2 , accJudgePerShare2, 1e18));
@@ -578,7 +578,6 @@ vm.stopPrank();
 judgeTreasury.setNewQuarterlyRewards(1_000_000 * 10 ** uint256(decimals));
 judgeTreasury.setNewQuarterlyRewards(500_000 * 10 ** uint256(decimals));
 judgeTreasury.fundRewardsManager(1);
-judgeTreasury.fundRewardsManager(2);
 
 vm.roll(poolStartBlock + 100_000);
 console.log("blockcount1", block.number);
@@ -602,10 +601,17 @@ vm.stopPrank();
 
 vm.roll(poolStartBlock + 648_000);
 console.log("blockcount2", block.number);
+judgeTreasury.fundRewardsManager(2);
+
 
 vm.prank(user1);
 judgeStaking.claimRewards(0);
 uint256 user1BalanceBeforeEndOfFirstQuarter = judgeToken.balanceOf(user1);
+
+uint256 accJudgePerShare = judgeStaking.accJudgePerShare();
+uint256 accBonusJudgePerShare = judgeStaking.accBonusJudgePerShare();
+console.log("accJudgePerShare", accJudgePerShare);
+console.log("accBonusJudgePerShare", accBonusJudgePerShare);
 
 vm.prank(user2);
 judgeStaking.claimRewards(0);
@@ -654,8 +660,40 @@ function testViewMyStakes()public{
 
 }
 
-function testViewStakeAtIndex()public{
+function testViewMyStakesAtIndex()public{
+uint256 amount = 100_000 * 10 ** uint256(decimals);
+uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
+uint256 depositAmount2 = 35_000 * 10 ** uint256(decimals);
+uint32 lockUpPeriod = 180;
+uint32 lockUpPeriod2 = 360;
+judgeToken.mint(user1, amount);
 
+vm.startPrank(user1);
+judgeToken.approve(address(judgeStaking), amount);
+uint256 blockNumber = block.number;
+judgeStaking.deposit(depositAmount, lockUpPeriod);
+uint256 accJudgePerShare = judgeStaking.accJudgePerShare();
+assertEq(judgeStaking.viewMyStakeAtIndex(0).id, 1);
+assertEq(judgeStaking.viewMyStakeAtIndex( 0).amountStaked, depositAmount);
+assertEq(judgeStaking.viewMyStakeAtIndex( 0).lockUpPeriod, lockUpPeriod);
+assertEq(judgeStaking.viewMyStakeAtIndex( 0).depositBlockNumber, blockNumber);
+assertEq(judgeStaking.viewMyStakeAtIndex( 0).maturityBlockNumber, blockNumber + (lockUpPeriod * 7200));
+assertEq(judgeStaking.viewMyStakeAtIndex( 0).stakeWeight, depositAmount/2);
+assertEq(judgeStaking.viewMyStakeAtIndex( 0).lockUpRatio, Math.mulDiv(lockUpPeriod, 1e18, 360));
+assertEq(judgeStaking.viewMyStakeAtIndex( 0).rewardDebt, Math.mulDiv(depositAmount/2 , accJudgePerShare, 1e18));
+vm.roll(blockNumber + 60);
+
+uint256 blockNumber2 = block.number;
+judgeStaking.deposit(depositAmount2, lockUpPeriod2);
+uint256 accJudgePerShare2 = judgeStaking.accJudgePerShare();
+assertEq(judgeStaking.viewMyStakeAtIndex(1).id, 2);
+assertEq(judgeStaking.viewMyStakeAtIndex( 1).amountStaked, depositAmount2);
+assertEq(judgeStaking.viewMyStakeAtIndex( 1).lockUpPeriod, lockUpPeriod2);
+assertEq(judgeStaking.viewMyStakeAtIndex( 1).depositBlockNumber, blockNumber2);
+assertEq(judgeStaking.viewMyStakeAtIndex( 1).maturityBlockNumber, blockNumber2 + (lockUpPeriod2 * 7200));
+assertEq(judgeStaking.viewMyStakeAtIndex( 1).stakeWeight, depositAmount2);
+assertEq(judgeStaking.viewMyStakeAtIndex( 1).lockUpRatio, Math.mulDiv(lockUpPeriod2, 1e18, 360));
+assertEq(judgeStaking.viewMyStakeAtIndex( 1).rewardDebt, Math.mulDiv(depositAmount2, accJudgePerShare2, 1e18));
 }
 
 function testViewUsersList()public{
