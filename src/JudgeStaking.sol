@@ -486,17 +486,25 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return userStakes[addr][_index];
     }
 
-    function viewMyPendingRewards(uint16 _index) external view validIndex(_index) returns (uint256) {
+    function viewMyEstimatedPendingRewards(uint16 _index) external view validIndex(_index) returns (uint256) {
         userStake memory stake = userStakes[msg.sender][_index];
         uint256 tempAccJudgePerShare = accJudgePerShare;
+        uint256 tempAccBonusJudgePerShare = accBonusJudgePerShare;
 
         if (block.number > lastRewardBlock && totalStakeWeight > 0) {
             uint256 blocksPassed = block.number - lastRewardBlock;
             uint256 totalReward = blocksPassed * rewardsPerBlock;
             tempAccJudgePerShare += Math.mulDiv(totalReward, SCALE, totalStakeWeight);
+
+            uint256 bonusBlocksPassed = judgeTreasury.bonusEndBlock() > lastRewardBlock ? Math.min(blocksPassed, judgeTreasury.bonusEndBlock() - lastRewardBlock) : 0;
+            uint256 totalBonusReward = bonusBlocksPassed * bonusPerBlock;
+            tempAccBonusJudgePerShare += Math.mulDiv(totalBonusReward, SCALE, totalStakeWeight);
         }
+
         uint256 pendingReward = Math.mulDiv(stake.stakeWeight, tempAccJudgePerShare, SCALE) - stake.rewardDebt;
-        return pendingReward;
+        uint256 pendingBonus = Math.mulDiv(stake.stakeWeight, tempAccBonusJudgePerShare, SCALE) - stake.rewardDebt;
+
+        return pendingReward + pendingBonus;
     }
 
     function calculateMisplacedJudge() public view onlyRole(TOKEN_RECOVERY_ROLE) returns (uint256) {

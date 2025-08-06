@@ -896,8 +896,33 @@ assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).lockUpRatio, Math.mulDiv(lo
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).rewardDebt, Math.mulDiv(depositAmount2, accJudgePerShare2, 1e18));
 }
 
-function testViewMyPendingRewards()public{
+function testViewMyEstimatedPendingRewards()public{
+    uint256 reward = 1_000_000 * 10 ** uint256(decimals);
+    uint256 amount = 100_000 * 10 ** uint256(decimals);
+    uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
+    uint256 depositAmount2 = 35_000 * 10 ** uint256(decimals);
+    uint32 lockUpPeriod = 180;
+    uint32 lockUpPeriod2 = 360;
+    uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
+    judgeToken.mint(user1, amount);
 
+    vm.prank(user1);
+    judgeToken.approve(address(judgeStaking), amount);
+    vm.roll(poolStartBlock);
+
+    judgeTreasury.setNewQuarterlyRewards(reward);
+    judgeTreasury.fundRewardsManager(1);
+
+    vm.prank(user1);
+    judgeStaking.deposit(depositAmount, lockUpPeriod);
+    vm.stopPrank();
+
+    vm.startPrank(user1);
+    judgeStaking.deposit(depositAmount2, lockUpPeriod2);
+
+    vm.roll(poolStartBlock + 10000);
+    assertEq(judgeStaking.viewMyEstimatedPendingRewards(0), 5611672278338945 * 10 ** uint256(6));
+    assertEq(judgeStaking.viewMyEstimatedPendingRewards(1), 982042648709315375 * 10 ** uint256(4));
 }
 
 function testCalculateMisplacedJudge()public{
@@ -1102,5 +1127,4 @@ function testtransferFeesFromOtherTokensOutOfStaking()public{
         assertEq(sampleERC20.balanceOf(user2), misplacedAmount/10);
         assertEq(judgeStaking.feeBalanceOfStrandedToken(strandedTokenAddr), 0);
 }
-
 }
