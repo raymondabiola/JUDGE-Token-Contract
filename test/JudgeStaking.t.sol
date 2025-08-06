@@ -38,6 +38,9 @@ contract JudgeStakingTest is Test{
     error OverPaidRewards();
     error InvalidLockUpPeriod();
     error InvalidIndex();
+    error InsufficientContractBalance();
+    error JudgeTokenRecoveryNotAllowed();
+    error InsufficientBalance();
 
       struct userStake {
         uint64 id;
@@ -899,17 +902,205 @@ function testViewMyPendingRewards()public{
 
 function testCalculateMisplacedJudge()public{
 
+    uint256 amount = 100_000 * 10 ** uint256(decimals);
+uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
+uint256 depositAmount2 = 35_000 * 10 ** uint256(decimals);
+uint32 lockUpPeriod = 180;
+uint32 lockUpPeriod2 = 360;
+judgeToken.mint(user1, amount);
+judgeToken.mint(user2, depositAmount2);
+    bytes32 tokenRecoveryAdmin = rewardsManager.TOKEN_RECOVERY_ROLE();
+    uint256 misplacedAmount = 100_000 * 10 ** uint256(decimals);
+    judgeToken.mint(user3, misplacedAmount);
+
+    vm.startPrank(user1);
+judgeToken.approve(address(judgeStaking), amount);
+judgeStaking.deposit(depositAmount, lockUpPeriod);
+vm.stopPrank();
+
+
+    vm.prank(user3);
+    judgeToken.transfer(address(judgeStaking), misplacedAmount);
+
+    vm.startPrank(user2);
+    judgeToken.approve(address(judgeStaking), depositAmount2);
+judgeStaking.deposit(depositAmount2, lockUpPeriod2);
+vm.stopPrank();
+    vm.expectRevert(
+        abi.encodeWithSelector(
+            AccessControlUnauthorizedAccount.selector,
+            owner,
+            tokenRecoveryAdmin
+        )
+    );
+    judgeStaking.calculateMisplacedJudge();
+    judgeStaking.grantRole(tokenRecoveryAdmin, owner);
+    assertEq(judgeStaking.calculateMisplacedJudge(), misplacedAmount);
 }
 
 function testRecoverMisplacedJudge()public{
+uint256 amount = 100_000 * 10 ** uint256(decimals);
+uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
+uint256 depositAmount2 = 35_000 * 10 ** uint256(decimals);
+uint32 lockUpPeriod = 180;
+uint32 lockUpPeriod2 = 360;
+judgeToken.mint(user1, amount);
+judgeToken.mint(user2, depositAmount2);
 
+bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
+    bytes32 tokenRecoveryAdmin = judgeStaking.TOKEN_RECOVERY_ROLE();
+    uint256 misplacedAmount = 100_000 * 10 ** uint256(decimals);
+    uint256 invalidAmount;
+    uint8 feePercent = 10;
+    judgeStaking.grantRole(stakingAdmin, owner);
+    judgeStaking.updateFeePercent(feePercent);
+    judgeToken.mint(user3, misplacedAmount);
+
+    vm.startPrank(user1);
+judgeToken.approve(address(judgeStaking), amount);
+judgeStaking.deposit(depositAmount, lockUpPeriod);
+vm.stopPrank();
+
+
+    vm.prank(user3);
+    judgeToken.transfer(address(judgeStaking), misplacedAmount);
+
+    vm.startPrank(user2);
+    judgeToken.approve(address(judgeStaking), depositAmount2);
+judgeStaking.deposit(depositAmount2, lockUpPeriod2);
+vm.stopPrank();
+   
+
+    vm.expectRevert(
+        abi.encodeWithSelector(
+            AccessControlUnauthorizedAccount.selector,
+            owner,
+            tokenRecoveryAdmin
+        )
+    );
+
+    judgeStaking.recoverMisplacedJudgeToken(user3, misplacedAmount);
+    judgeStaking.grantRole(tokenRecoveryAdmin, owner);
+
+    vm.expectRevert(InvalidAddress.selector);
+    judgeStaking.recoverMisplacedJudgeToken(zeroAddress, misplacedAmount);
+
+    vm.expectRevert(CannotInputThisContractAddress.selector);
+   judgeStaking.recoverMisplacedJudgeToken(address(judgeStaking), misplacedAmount);
+
+    vm.expectRevert(InvalidAmount.selector);
+    judgeStaking.recoverMisplacedJudgeToken(user3, invalidAmount);
+
+    judgeStaking.recoverMisplacedJudgeToken(user3, misplacedAmount);
+    assertEq(judgeToken.balanceOf(user3), misplacedAmount * 9 / 10);
+    assertEq(judgeToken.balanceOf(address(judgeTreasury)), misplacedAmount / 10);
 }
 
 function testRecoverErc20()public{
+bytes32 tokenRecoveryAdmin = judgeStaking.TOKEN_RECOVERY_ROLE();
+    bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
+    address strandedTokenAddr = address(sampleERC20);
+    uint256 misplacedAmount = 1000 ether;
+    uint256 tooHighAmount = 1001 ether;
+    uint256 invalidAmount;
+    uint8 feePercent = 10;
+    judgeStaking.grantRole(stakingAdmin, owner);
+    judgeStaking.updateFeePercent(feePercent);
+    sampleERC20.mint(user1, misplacedAmount);
 
+    vm.prank(user1);
+
+    sampleERC20.transfer(address(judgeStaking), misplacedAmount);
+    assertEq(sampleERC20.balanceOf(address(judgeStaking)), misplacedAmount);
+
+    vm.expectRevert(
+        abi.encodeWithSelector(
+            AccessControlUnauthorizedAccount.selector,
+            owner,
+            tokenRecoveryAdmin
+        )
+    );
+    judgeStaking.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
+
+    judgeStaking.grantRole(tokenRecoveryAdmin, owner);
+
+    vm.expectRevert(CannotInputThisContractAddress.selector);
+    judgeStaking.recoverErc20(strandedTokenAddr, address(judgeStaking), misplacedAmount);
+
+    vm.expectRevert(InvalidAmount.selector);
+    judgeStaking.recoverErc20(strandedTokenAddr, user1, invalidAmount);
+
+    vm.expectRevert(InvalidAddress.selector);
+    judgeStaking.recoverErc20(zeroAddress, user1, misplacedAmount);
+
+    vm.expectRevert(InvalidAddress.selector);
+    judgeStaking.recoverErc20(strandedTokenAddr, zeroAddress, misplacedAmount);
+
+    vm.expectRevert(InvalidAddress.selector);
+    judgeStaking.recoverErc20(zeroAddress, zeroAddress, misplacedAmount);
+
+    vm.expectRevert(InsufficientContractBalance.selector);
+    judgeStaking.recoverErc20(strandedTokenAddr, user1, tooHighAmount);
+
+    vm.expectRevert(JudgeTokenRecoveryNotAllowed.selector);
+    judgeStaking.recoverErc20(address(judgeToken), user1, misplacedAmount);
+
+    judgeStaking.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
+    assertEq(sampleERC20.balanceOf(user1), misplacedAmount * 9/10);
+    assertEq(judgeStaking.feeBalanceOfStrandedToken(strandedTokenAddr), misplacedAmount /10 );
 }
 
 function testtransferFeesFromOtherTokensOutOfStaking()public{
+        bytes32 tokenRecoveryAdmin = judgeStaking.TOKEN_RECOVERY_ROLE();
+        bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
+        address strandedTokenAddr = address(sampleERC20);
+        uint256 misplacedAmount = 1000 ether;
+        uint256 invalidAmount;
+        uint8 feePercent = 10;
+        judgeStaking.grantRole(stakingAdmin, owner);
+        judgeStaking.updateFeePercent(feePercent);
+        sampleERC20.mint(user1, misplacedAmount);
 
-}    
+        vm.prank(user1);
+        sampleERC20.transfer(address(judgeStaking), misplacedAmount);
+
+        judgeStaking.grantRole(tokenRecoveryAdmin, owner);
+        judgeStaking.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
+
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+            AccessControlUnauthorizedAccount.selector,
+            user1,
+            tokenRecoveryAdmin           
+            ));
+        vm.prank(user1);
+        judgeStaking.transferFeesFromOtherTokensOutOfStaking(strandedTokenAddr, user2, misplacedAmount/10);
+
+        vm.expectRevert(CannotInputThisContractAddress.selector);
+        judgeStaking.transferFeesFromOtherTokensOutOfStaking(strandedTokenAddr, address(judgeStaking), misplacedAmount/10);
+
+        vm.expectRevert(InvalidAmount.selector);
+        judgeStaking.transferFeesFromOtherTokensOutOfStaking(strandedTokenAddr, user2, invalidAmount);
+
+        vm.expectRevert(InvalidAddress.selector);
+        judgeStaking.transferFeesFromOtherTokensOutOfStaking(zeroAddress, user2, misplacedAmount/10);
+
+        vm.expectRevert(InvalidAddress.selector);
+        judgeStaking.transferFeesFromOtherTokensOutOfStaking(strandedTokenAddr, zeroAddress, misplacedAmount/10);
+
+        vm.expectRevert(InvalidAddress.selector);
+        judgeStaking.transferFeesFromOtherTokensOutOfStaking(zeroAddress, zeroAddress, misplacedAmount/10);
+
+        vm.expectRevert(InsufficientBalance.selector);
+        judgeStaking.transferFeesFromOtherTokensOutOfStaking(strandedTokenAddr, user2, misplacedAmount*2/10);
+
+        vm.expectRevert(JudgeTokenRecoveryNotAllowed.selector);
+        judgeStaking.transferFeesFromOtherTokensOutOfStaking(address(judgeToken), user2, misplacedAmount/10);
+
+        judgeStaking.transferFeesFromOtherTokensOutOfStaking(strandedTokenAddr, user2, misplacedAmount/10);
+        assertEq(sampleERC20.balanceOf(user2), misplacedAmount/10);
+        assertEq(judgeStaking.feeBalanceOfStrandedToken(strandedTokenAddr), 0);
+}
+
 }
