@@ -41,6 +41,7 @@ contract JudgeStakingTest is Test{
     error InsufficientContractBalance();
     error JudgeTokenRecoveryNotAllowed();
     error InsufficientBalance();
+    error NotYetMatured();
 
       struct userStake {
         uint64 id;
@@ -656,7 +657,69 @@ logRewards(user3, user3BalanceinSecondQuarter, user3BalanceBeforeEndOfFirstQuart
 }
 
 function testWithdraw()public{
+uint256 reward = 1_000_000 * 10 ** uint256(decimals);
+    uint256 amount = 100_000 * 10 ** uint256(decimals);
+    uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
+    uint256 withdrawalAmount = 30_000 * 10 ** uint256(decimals);
+    uint256 depositAmount2 = 40_000 * 10 ** uint256(decimals);
+    uint256 depositAmount3 = 60_000 * 10 ** uint256(decimals);
+    uint256 tooHighAmount = 40_001 * 10 ** uint256(decimals);
+    uint256 invalidAmount;
+     uint256 bonus = 100_000 * 10 ** uint256(decimals);
+    uint32 lockUpPeriod = 10;
+    uint32 lockUpPeriod2 = 360;
+    uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
+    judgeToken.mint(user1, amount);
+    judgeToken.mint(user2, amount);
+    judgeToken.mint(owner, amount);
 
+    vm.prank(user1);
+    judgeToken.approve(address(judgeStaking), amount);
+
+    vm.roll(poolStartBlock);
+
+    judgeTreasury.setNewQuarterlyRewards(reward);
+    judgeTreasury.fundRewardsManager(1);
+
+    vm.prank(user1);
+    judgeStaking.deposit(depositAmount, lockUpPeriod);
+
+    vm.roll(poolStartBlock + 2000);
+    
+    judgeToken.approve(address(judgeTreasury), bonus);
+    judgeTreasury.addBonusToQuarterReward(bonus, 200_000);
+    vm.prank(user1);
+    judgeStaking.deposit(depositAmount2, lockUpPeriod2);
+    uint256 balanceOfUser1AfterSecondDeposit = judgeToken.balanceOf(user1);
+
+    vm.startPrank(user2);
+    judgeToken.approve(address(judgeStaking), amount);
+    judgeStaking.deposit(depositAmount3, lockUpPeriod2);
+    vm.stopPrank();
+
+    vm.roll(poolStartBlock + 80_000);
+
+    vm.expectRevert(InvalidAmount.selector);
+    vm.prank(user1);
+    judgeStaking.withdraw(invalidAmount, 0);
+
+    vm.expectRevert(InvalidIndex.selector);
+    vm.prank(user1);
+    judgeStaking.withdraw(withdrawalAmount, 2);
+
+    vm.expectRevert(InsufficientBalance.selector);
+    vm.prank(user1);
+    judgeStaking.withdraw(tooHighAmount, 0);
+
+    vm.expectRevert(NotYetMatured.selector);
+    vm.prank(user2);
+    judgeStaking.withdraw(withdrawalAmount, 0);
+
+    vm.prank(user1);
+    judgeStaking.withdraw(withdrawalAmount, 0);
+    uint256 balanceOfUser1AfterWithdrawal = judgeToken.balanceOf(user1);
+    uint256 totalAmountWithdrawn = balanceOfUser1AfterWithdrawal - balanceOfUser1AfterSecondDeposit;
+    assertEq(totalAmountWithdrawn, 34837742504409171024543);
 }
 
 function testWithdrawAll()public{
