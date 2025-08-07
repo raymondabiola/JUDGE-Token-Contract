@@ -173,7 +173,7 @@ assertEq(address(judgeStaking.judgeTreasury()), address(judgeToken));
 }
 
 function testUpdateEarlyWithdrawalPercent()public{
-assertEq(judgeStaking.earlyWithdrawPenaltyPercent(), 10);
+assertEq(judgeStaking.earlyWithdrawPenaltyPercentForMaxLockupPeriod(), 10);
 bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
 uint8 newEarlyWithdrawalPercent = 5;
 uint8 earlyWithdrawalPercentHigherThanMax = 21;
@@ -187,16 +187,16 @@ vm.expectRevert(
     )
 );
 vm.prank(user1);
-judgeStaking.updateEarlyWithdrawPenaltyPercent(newEarlyWithdrawalPercent);
+judgeStaking.updateEarlyWithdrawPenaltyPercentForMaxLockupPeriod(newEarlyWithdrawalPercent);
 
 vm.expectRevert(InvalidAmount.selector);
-judgeStaking.updateEarlyWithdrawPenaltyPercent(invalidAmount);
+judgeStaking.updateEarlyWithdrawPenaltyPercentForMaxLockupPeriod(invalidAmount);
 
 vm.expectRevert(ValueTooHigh.selector);
-judgeStaking.updateEarlyWithdrawPenaltyPercent(earlyWithdrawalPercentHigherThanMax);
+judgeStaking.updateEarlyWithdrawPenaltyPercentForMaxLockupPeriod(earlyWithdrawalPercentHigherThanMax);
 
-judgeStaking.updateEarlyWithdrawPenaltyPercent(newEarlyWithdrawalPercent);
-assertEq(judgeStaking.earlyWithdrawPenaltyPercent(), 5);
+judgeStaking.updateEarlyWithdrawPenaltyPercentForMaxLockupPeriod(newEarlyWithdrawalPercent);
+assertEq(judgeStaking.earlyWithdrawPenaltyPercentForMaxLockupPeriod(), 5);
 }
 
 function testGetCurrentQuarterIndex()public{
@@ -657,7 +657,7 @@ logRewards(user3, user3BalanceinSecondQuarter, user3BalanceBeforeEndOfFirstQuart
 }
 
 function testWithdraw()public{
-uint256 reward = 1_000_000 * 10 ** uint256(decimals);
+    uint256 reward = 1_000_000 * 10 ** uint256(decimals);
     uint256 amount = 100_000 * 10 ** uint256(decimals);
     uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
     uint256 withdrawalAmount = 30_000 * 10 ** uint256(decimals);
@@ -719,11 +719,80 @@ uint256 reward = 1_000_000 * 10 ** uint256(decimals);
     judgeStaking.withdraw(withdrawalAmount, 0);
     uint256 balanceOfUser1AfterWithdrawal = judgeToken.balanceOf(user1);
     uint256 totalAmountWithdrawn = balanceOfUser1AfterWithdrawal - balanceOfUser1AfterSecondDeposit;
-    assertEq(totalAmountWithdrawn, 34837742504409171024543);
+    assertApproxEqRel(totalAmountWithdrawn, 34848731500000000000000, 4e14);
+    assertApproxEqAbs(totalAmountWithdrawn, 34848731500000000000000, 11e19);
+
+    JudgeStaking.userStake memory user1Stake = judgeStaking.viewUserStakeAtIndex(user1, 0);
+    assertEq(user1Stake.amountStaked, 10_000 * 10 ** uint256(decimals));
+    assertEq(judgeStaking.totalStaked(), 110_000 * 10 ** uint256(decimals));
+    assertApproxEqAbs(user1Stake.stakeWeight, user1Stake.amountStaked* 10 * 1e18 / 360 /1e18, 10_000 );
+    assertApproxEqAbs(judgeStaking.totalStakeWeight(), 10027778e16, 10000000000000000);
+    assertEq(user1Stake.rewardDebt, user1Stake.stakeWeight* judgeStaking.accJudgePerShare() / 1e18);
+    assertEq(user1Stake.bonusRewardDebt, user1Stake.stakeWeight* judgeStaking.accBonusJudgePerShare() / 1e18);
 }
 
 function testWithdrawAll()public{
+uint256 reward = 1_000_000 * 10 ** uint256(decimals);
+    uint256 amount = 100_000 * 10 ** uint256(decimals);
+    uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
+    uint256 depositAmount2 = 40_000 * 10 ** uint256(decimals);
+    uint256 depositAmount3 = 60_000 * 10 ** uint256(decimals);
+    uint256 bonus = 100_000 * 10 ** uint256(decimals);
+    uint32 lockUpPeriod = 10;
+    uint32 lockUpPeriod2 = 360;
+    uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
+    judgeToken.mint(user1, amount);
+    judgeToken.mint(user2, amount);
+    judgeToken.mint(owner, amount);
 
+    vm.prank(user1);
+    judgeToken.approve(address(judgeStaking), amount);
+
+    vm.roll(poolStartBlock);
+
+    judgeTreasury.setNewQuarterlyRewards(reward);
+    judgeTreasury.fundRewardsManager(1);
+
+    vm.prank(user1);
+    judgeStaking.deposit(depositAmount, lockUpPeriod);
+
+    vm.roll(poolStartBlock + 2000);
+    
+    judgeToken.approve(address(judgeTreasury), bonus);
+    judgeTreasury.addBonusToQuarterReward(bonus, 200_000);
+    vm.prank(user1);
+    judgeStaking.deposit(depositAmount2, lockUpPeriod2);
+    uint256 balanceOfUser1AfterSecondDeposit = judgeToken.balanceOf(user1);
+
+    vm.startPrank(user2);
+    judgeToken.approve(address(judgeStaking), amount);
+    judgeStaking.deposit(depositAmount3, lockUpPeriod2);
+    vm.stopPrank();
+
+    vm.roll(poolStartBlock + 80_000);
+
+    vm.expectRevert(InvalidIndex.selector);
+    vm.prank(user1);
+    judgeStaking.withdrawAll(2);
+
+    vm.expectRevert(NotYetMatured.selector);
+    vm.prank(user2);
+    judgeStaking.withdrawAll(0);
+
+    vm.prank(user1);
+    judgeStaking.withdrawAll(0);
+    uint256 balanceOfUser1AfterWithdrawal = judgeToken.balanceOf(user1);
+    uint256 totalAmountWithdrawn = balanceOfUser1AfterWithdrawal - balanceOfUser1AfterSecondDeposit;
+    assertApproxEqRel(totalAmountWithdrawn, 44848731500000000000000, 4e14);
+    assertApproxEqAbs(totalAmountWithdrawn, 44848731500000000000000, 11e19);
+
+    JudgeStaking.userStake memory user1Stake = judgeStaking.viewUserStakeAtIndex(user1, 0);
+    assertEq(user1Stake.amountStaked, 0);
+    assertEq(judgeStaking.totalStaked(), 100_000 * 10 ** uint256(decimals));
+    assertEq(user1Stake.stakeWeight, 0);
+    assertEq(judgeStaking.totalStakeWeight(), 1e23);
+    assertEq(user1Stake.rewardDebt, 0);
+    assertEq(user1Stake.bonusRewardDebt, 0);
 }
 
 function testEarlyWithdraw()public{

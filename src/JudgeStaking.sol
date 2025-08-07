@@ -38,7 +38,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint64 private constant SCALE = 1e18;
     address[] internal users;
     uint16 private constant maxLockUpPeriod = 360;
-    uint8 public earlyWithdrawPenaltyPercent;
+    uint8 public earlyWithdrawPenaltyPercentForMaxLockupPeriod;
     uint256 public totalPenalties;
     bool public emergencyFuncCalled;
     uint8 public constant maxPenaltyPercent = 20;
@@ -76,8 +76,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
     event KeyParametersUpdated(address indexed by, address indexed newRewardsManager);
     event JudgeRecoveryMinimumThresholdUpdated(uint256 oldValue, uint256 newValue);
-    event EarlyWithdrawPenaltyPercentInitialized(uint256 newValue);
-    event EarlyWithdrawPenaltyPercentUpdated(uint256 newValue);
+    event EarlyWithdrawPenaltyPercentForMaxLockupPeriodInitialized(uint256 newValue);
+    event EarlyWithdrawPenaltyPercentForMaxLockupPeriodUpdated(uint256 newValue);
     event FeePercentUpdated(uint8 oldValue, uint8 newValue);
     event EarlyWithdrawalPenalized(address indexed user, uint256 block, uint256 penalty);
     event ClaimedReward(address indexed user, uint256 rewards);
@@ -105,17 +105,17 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     constructor(
         address _judgeTokenAddress,
-        uint8 _earlyWithdrawPenaltyPercent
+        uint8 _earlyWithdrawPenaltyPercentForMaxLockupPeriod
     ) validAddress(_judgeTokenAddress) {
         require(_judgeTokenAddress.code.length > 0, EOANotAllowed());
-        require(earlyWithdrawPenaltyPercent <= maxPenaltyPercent, ValueTooHigh());
+        require(earlyWithdrawPenaltyPercentForMaxLockupPeriod <= maxPenaltyPercent, ValueTooHigh());
         judgeToken = JudgeToken(_judgeTokenAddress);
         newStakeId = 1;
-        earlyWithdrawPenaltyPercent = _earlyWithdrawPenaltyPercent;
+        earlyWithdrawPenaltyPercentForMaxLockupPeriod = _earlyWithdrawPenaltyPercentForMaxLockupPeriod;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         stakingPoolStartBlock = block.number;
         emit JudgeTokenAddressWasSet(_judgeTokenAddress);
-        emit EarlyWithdrawPenaltyPercentInitialized(_earlyWithdrawPenaltyPercent);
+        emit EarlyWithdrawPenaltyPercentForMaxLockupPeriodInitialized(_earlyWithdrawPenaltyPercentForMaxLockupPeriod);
     }
 
     modifier validAmount(uint256 _amount){
@@ -148,13 +148,13 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit KeyParametersUpdated(msg.sender, _rewardsManagerAddress);
     }
 
-    function updateEarlyWithdrawPenaltyPercent(uint8 _earlyWithdrawPenaltyPercent)
-        external validAmount(_earlyWithdrawPenaltyPercent)
+    function updateEarlyWithdrawPenaltyPercentForMaxLockupPeriod(uint8 _earlyWithdrawPenaltyPercentForMaxLockupPeriod)
+        external validAmount(_earlyWithdrawPenaltyPercentForMaxLockupPeriod)
         onlyRole(STAKING_ADMIN_ROLE)
     {
-        require(_earlyWithdrawPenaltyPercent <= maxPenaltyPercent, ValueTooHigh());
-        earlyWithdrawPenaltyPercent = _earlyWithdrawPenaltyPercent;
-        emit EarlyWithdrawPenaltyPercentUpdated(_earlyWithdrawPenaltyPercent);
+        require(_earlyWithdrawPenaltyPercentForMaxLockupPeriod <= maxPenaltyPercent, ValueTooHigh());
+        earlyWithdrawPenaltyPercentForMaxLockupPeriod = _earlyWithdrawPenaltyPercentForMaxLockupPeriod;
+        emit EarlyWithdrawPenaltyPercentForMaxLockupPeriodUpdated(_earlyWithdrawPenaltyPercentForMaxLockupPeriod);
     }
 
     function getCurrentQuarterIndex()public view returns(uint256){
@@ -221,7 +221,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     function updatePool() public {
         uint256 currentQuarterIndex = getCurrentQuarterIndex();
         uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex-1) * 648_000;
-        uint256 quarterEnd = quarterStart + 648_000;
         if (block.number <= lastRewardBlock) {
             return;
         }
@@ -398,7 +397,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
 
         totalStakeWeight -= stake.stakeWeight;
-        uint256 penalty = Math.mulDiv(_amount, earlyWithdrawPenaltyPercent, 100);
+        uint256 penalty = Math.mulDiv(_amount, Math.mulDiv(earlyWithdrawPenaltyPercentForMaxLockupPeriod, stake.lockUpRatio, SCALE), 100 );
         uint256 deduction = _amount + penalty;
         require(deduction <= stake.amountStaked, InsufficientBalance());
         if (deduction == stake.amountStaked) {
