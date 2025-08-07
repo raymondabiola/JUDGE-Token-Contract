@@ -377,7 +377,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit Withdrawn(msg.sender, amountWithdrawn);
     }
 
-    function earlyWithdraw(uint16 _index, uint256 _amount) external validAmount(_amount) validIndex(_index) nonReentrant{
+    function earlyWithdraw(uint256 _amount, uint16 _index) external validAmount(_amount) validIndex(_index) nonReentrant{
         uint256 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number < stake.maturityBlockNumber, AlreadyMatured());

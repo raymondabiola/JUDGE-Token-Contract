@@ -42,6 +42,7 @@ contract JudgeStakingTest is Test{
     error JudgeTokenRecoveryNotAllowed();
     error InsufficientBalance();
     error NotYetMatured();
+    error AlreadyMatured();
 
       struct userStake {
         uint64 id;
@@ -732,7 +733,7 @@ function testWithdraw()public{
 }
 
 function testWithdrawAll()public{
-uint256 reward = 1_000_000 * 10 ** uint256(decimals);
+    uint256 reward = 1_000_000 * 10 ** uint256(decimals);
     uint256 amount = 100_000 * 10 ** uint256(decimals);
     uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
     uint256 depositAmount2 = 40_000 * 10 ** uint256(decimals);
@@ -796,7 +797,80 @@ uint256 reward = 1_000_000 * 10 ** uint256(decimals);
 }
 
 function testEarlyWithdraw()public{
+    uint256 reward = 1_000_000 * 10 ** uint256(decimals);
+    uint256 amount = 100_000 * 10 ** uint256(decimals);
+    uint256 bonus = 100_000 * 10 ** uint256(decimals);
+    uint32 lockUpPeriod = 10;
+    uint32 lockUpPeriod2 = 360;
+    uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
+    judgeToken.mint(user1, amount);
+    judgeToken.mint(user2, amount);
+    judgeToken.mint(owner, amount);
 
+    vm.prank(user1);
+    judgeToken.approve(address(judgeStaking), amount);
+
+    vm.roll(poolStartBlock);
+
+    judgeTreasury.setNewQuarterlyRewards(reward);
+    judgeTreasury.fundRewardsManager(1);
+
+    vm.prank(user1);
+    judgeStaking.deposit(40_000 * 10 ** uint256(decimals), lockUpPeriod);
+    uint256 user1Stake1StakeWeight = 40_000 * 10 ** uint256(decimals) * 10 * 1e18 / 360;
+
+    vm.roll(poolStartBlock + 2000);
+    
+    judgeToken.approve(address(judgeTreasury), bonus);
+    judgeTreasury.addBonusToQuarterReward(bonus, 200_000);
+    vm.prank(user1);
+    judgeStaking.deposit(40_000 * 10 ** uint256(decimals), lockUpPeriod2);
+    uint256 user1Stake2StakeWeight = 40_000 * 10 ** uint256(decimals) * 360 * 1e18 / 360;
+    uint256 accJudgePerShareAFter2000Blocks = 2000 * (1_000_000 * 10 ** uint256(decimals) / 640_000) / user1Stake1StakeWeight;
+
+    vm.roll(poolStartBlock + 3000);
+    vm.startPrank(user2);
+    judgeToken.approve(address(judgeStaking), amount);
+    judgeStaking.deposit(60_000 * 10 ** uint256(decimals), lockUpPeriod2);
+    vm.stopPrank();
+
+    uint256 accJudgePerShareAFter3000Blocks = (1_000 * (1_000_000 * 10 ** uint256(decimals) / 640_000) * 1e18 / (user1Stake1StakeWeight + user1Stake2StakeWeight) ) + accJudgePerShareAFter2000Blocks;
+    uint256 accBonusJudgePerShareAfter3000Blocks = (1_000 * (100_000 * 10 ** uint256(decimals) / 200_000) * 1e18 / (user1Stake1StakeWeight + user1Stake2StakeWeight));
+    uint256 user2StakeWeight = 60_000 * 10 ** uint256(decimals) * 360 * 1e18 / 360;
+    uint256 balanceOfUser2AfterDeposit = judgeToken.balanceOf(user2);
+
+    vm.roll(poolStartBlock + 80_000);
+
+    uint256 totalStakeWeight = user1Stake1StakeWeight + user1Stake2StakeWeight + user2StakeWeight;
+    uint256 accJudgePerShareAFter80_000Blocks = (77_000 * (1_000_000 * 10 ** uint256(decimals) / 640_000) * 1e18 / totalStakeWeight) + accJudgePerShareAFter3000Blocks;
+    uint256 accBonusJudgePerShareAfter80_000Blocks = (77_000 * (100_000 * 10 ** uint256(decimals) / 200_000) * 1e18 / totalStakeWeight) + accBonusJudgePerShareAfter3000Blocks;
+    vm.expectRevert(InvalidAmount.selector);
+    vm.prank(user2);
+    judgeStaking.earlyWithdraw(0, 0);
+
+    vm.expectRevert(InvalidIndex.selector);
+    vm.prank(user2);
+    judgeStaking.earlyWithdraw(50_000 * 10 ** uint256(decimals), 2);
+
+    vm.expectRevert(InsufficientBalance.selector);
+    vm.prank(user2);
+    judgeStaking.earlyWithdraw(60_001 * 10 ** uint256(decimals), 0);
+
+    vm.expectRevert(AlreadyMatured.selector);
+    vm.prank(user1);
+    judgeStaking.earlyWithdraw(50_000 * 10 ** uint256(decimals), 0);
+
+    vm.prank(user2);
+    judgeStaking.earlyWithdraw(50_000 * 10 ** uint256(decimals), 0);
+
+    uint256 balanceOfUser2AfterWithdrawal = judgeToken.balanceOf(user2);
+    uint256 totalAmountWithdrawn = balanceOfUser2AfterWithdrawal - balanceOfUser2AfterDeposit;
+    uint256 user2RewardsExpected = (user2StakeWeight * accJudgePerShareAFter80_000Blocks / 1e18) - (user2StakeWeight * accJudgePerShareAFter3000Blocks / 1e18);
+    uint256 user2BonusRewardsExpected = user2StakeWeight * accBonusJudgePerShareAfter80_000Blocks / 1e18  - (user2StakeWeight * accBonusJudgePerShareAfter3000Blocks / 1e18);
+    uint256 user2WithdrawnDeposit = 50_000 * 10 ** uint256(decimals);
+    uint256 expectedTotalWithdrawnByUser2 = user2RewardsExpected + user2BonusRewardsExpected + user2WithdrawnDeposit;
+    assertApproxEqRel(totalAmountWithdrawn, expectedTotalWithdrawnByUser2, 4e14);
+    assertApproxEqAbs(totalAmountWithdrawn, expectedTotalWithdrawnByUser2, 11e19);
 }
 
 function testEmergencyWithdraw()public{
