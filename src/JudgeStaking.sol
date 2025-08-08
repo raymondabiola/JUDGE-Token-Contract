@@ -256,7 +256,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 maturityBlockNumber = depositBlockNumber + (lockUpPeriod * 7200);
         uint256 stakeWeight = Math.mulDiv(amountStaked, lockUpRatio, SCALE);
         totalStakeWeight += stakeWeight;
-        lastRewardBlock = block.number;
         totalStaked += _amount;
 
         updatePool();
