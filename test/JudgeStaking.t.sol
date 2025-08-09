@@ -817,21 +817,23 @@ function testEarlyWithdraw()public{
 
     vm.prank(user1);
     judgeStaking.deposit(40_000 * 10 ** uint256(decimals), lockUpPeriod);
-    uint256 user1Stake1StakeWeight = 40_000 * 10 ** uint256(decimals) * 10 * 1e18 / 360;
+    uint256 user1Stake1StakeWeight = Math.mulDiv(4e22, 10, 360);
 
     vm.roll(poolStartBlock + 2000);
     
     judgeToken.approve(address(judgeTreasury), bonus);
     judgeTreasury.addBonusToQuarterReward(bonus, 200_000);
 
-    uint256 accJudgePerShareAFter2000Blocks = 2000 * (1_000_000 * 10 ** uint256(decimals) / 648_000) *1e18 / user1Stake1StakeWeight;
+    uint256 accJudgePerShareAFter2000Blocks = Math.mulDiv(2000, Math.mulDiv(1_000_000 * 10 ** uint256(decimals), 1e18, 648_000),  user1Stake1StakeWeight);
+    console.log("accJudgePerShareAfter2000Blocks", accJudgePerShareAFter2000Blocks);
 
     vm.roll(poolStartBlock + 3000);
     vm.prank(user1);
     judgeStaking.deposit(40_000 * 10 ** uint256(decimals), lockUpPeriod2);
-    uint256 user1Stake2StakeWeight = 40_000 * 10 ** uint256(decimals) * 360 * 1e18 / 360;
-    uint256 accJudgePerShareAFter3000Blocks = (1_000 * (1_000_000 * 10 ** uint256(decimals) / 648_000) * 1e18 / (user1Stake1StakeWeight + user1Stake2StakeWeight) ) + accJudgePerShareAFter2000Blocks;
-uint256 accBonusJudgePerShareAfter3000Blocks = (1_000 * (100_000 * 10 ** uint256(decimals) / 200_000) * 1e18 / (user1Stake1StakeWeight + user1Stake2StakeWeight));
+    uint256 user1Stake2StakeWeight = Math.mulDiv(Math.mulDiv( 40_000 * 10 ** uint256(decimals), 360, 1), 1e18, 360);
+
+    uint256 accJudgePerShareAFter3000Blocks = (Math.mulDiv(1_000, Math.mulDiv(1_000_000 * 10 ** uint256(decimals), 1e18, 648_000), user1Stake1StakeWeight)) + accJudgePerShareAFter2000Blocks;
+    uint256 accBonusJudgePerShareAfter3000Blocks = Math.mulDiv(1_000, Math.mulDiv(100_000 * 10 ** uint256(decimals), 1e18, 200_000), user1Stake1StakeWeight);
 
     vm.roll(poolStartBlock + 4000);
     vm.startPrank(user2);
@@ -839,16 +841,16 @@ uint256 accBonusJudgePerShareAfter3000Blocks = (1_000 * (100_000 * 10 ** uint256
     judgeStaking.deposit(60_000 * 10 ** uint256(decimals), lockUpPeriod2);
     vm.stopPrank();
 
-    uint256 accJudgePerShareAFter4000Blocks = (1_000 * (1_000_000 * 10 ** uint256(decimals) / 648_000) * 1e18 / (user1Stake1StakeWeight + user1Stake2StakeWeight) ) + accJudgePerShareAFter3000Blocks;
-    uint256 accBonusJudgePerShareAfter4000Blocks = (1_000 * (100_000 * 10 ** uint256(decimals) / 200_000) * 1e18 / (user1Stake1StakeWeight + user1Stake2StakeWeight)) + accBonusJudgePerShareAfter3000Blocks;
-    uint256 user2StakeWeight = 60_000 * 10 ** uint256(decimals) * 360 * 1e18 / 360;
+    uint256 accJudgePerShareAFter4000Blocks = (Math.mulDiv(1_000, Math.mulDiv(1_000_000 * 10 ** uint256(decimals), 1e18, 648_000), user1Stake1StakeWeight + user1Stake2StakeWeight)) + accJudgePerShareAFter3000Blocks;
+    uint256 accBonusJudgePerShareAfter4000Blocks = (Math.mulDiv(1_000, Math.mulDiv(100_000 * 10 ** uint256(decimals), 1e18, 200_000), user1Stake1StakeWeight + user1Stake2StakeWeight)) + accBonusJudgePerShareAfter3000Blocks;
+    uint256 user2StakeWeight = Math.mulDiv(Math.mulDiv(60_000 * 10 ** uint256(decimals), 360, 1), 1e18, 360);
     uint256 balanceOfUser2AfterDeposit = judgeToken.balanceOf(user2);
 
     vm.roll(poolStartBlock + 80_000);
 
     uint256 totalStakeWeight = user1Stake1StakeWeight + user1Stake2StakeWeight + user2StakeWeight;
-    uint256 accJudgePerShareAFter80_000Blocks = (76_000 * (1_000_000 * 10 ** uint256(decimals) / 648_000) * 1e18 / totalStakeWeight) + accJudgePerShareAFter4000Blocks;
-    uint256 accBonusJudgePerShareAfter80_000Blocks = (76_000 * (100_000 * 10 ** uint256(decimals) / 200_000) * 1e18 / totalStakeWeight) + accBonusJudgePerShareAfter4000Blocks;
+    uint256 accJudgePerShareAFter80_000Blocks = Math.mulDiv(76_000, Math.mulDiv(1_000_000 * 10 ** uint256(decimals), 1e18, 648_000), totalStakeWeight) + accJudgePerShareAFter4000Blocks;
+    uint256 accBonusJudgePerShareAfter80_000Blocks = Math.mulDiv(76_000, Math.mulDiv(100_000 * 10 ** uint256(decimals), 1e18, 200_000), totalStakeWeight) + accBonusJudgePerShareAfter4000Blocks;
     vm.expectRevert(InvalidAmount.selector);
     vm.prank(user2);
     judgeStaking.earlyWithdraw(0, 0);
@@ -870,8 +872,8 @@ uint256 accBonusJudgePerShareAfter3000Blocks = (1_000 * (100_000 * 10 ** uint256
 
     uint256 balanceOfUser2AfterWithdrawal = judgeToken.balanceOf(user2);
     uint256 totalAmountWithdrawn = balanceOfUser2AfterWithdrawal - balanceOfUser2AfterDeposit;
-    uint256 user2RewardsExpected = (user2StakeWeight * accJudgePerShareAFter80_000Blocks / 1e18) - (user2StakeWeight * accJudgePerShareAFter4000Blocks / 1e18);
-    uint256 user2BonusRewardsExpected = (user2StakeWeight * accBonusJudgePerShareAfter80_000Blocks / 1e18 ) - (user2StakeWeight * accBonusJudgePerShareAfter4000Blocks / 1e18);
+    uint256 user2RewardsExpected = Math.mulDiv(user2StakeWeight, accJudgePerShareAFter80_000Blocks, 1e18) - Math.mulDiv(user2StakeWeight, accJudgePerShareAFter4000Blocks, 1e18);
+    uint256 user2BonusRewardsExpected = Math.mulDiv(user2StakeWeight, accBonusJudgePerShareAfter80_000Blocks, 1e18) - Math.mulDiv(user2StakeWeight, accBonusJudgePerShareAfter4000Blocks, 1e18);
     uint256 user2WithdrawnDeposit = 50_000 * 10 ** uint256(decimals);
     uint256 expectedTotalWithdrawnByUser2 = user2RewardsExpected + user2BonusRewardsExpected + user2WithdrawnDeposit;
     assertApproxEqRel(totalAmountWithdrawn, expectedTotalWithdrawnByUser2, 4e14);
