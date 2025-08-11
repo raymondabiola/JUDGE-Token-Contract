@@ -69,9 +69,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     event RewardsFunded(uint256 amount);
     event Deposited(address indexed user, uint256 amount);
-    event Withdrawn(address indexed user, uint256 amount);
+    event Withdrawn(address indexed user, uint256 amount, uint256 rewardsPaid);
     event EmergencyWithdrawal(
-        address indexed admin, address indexed user, uint256 stakeID, uint256 stakeWithdrawn, uint256 rewardPaid
+        address indexed admin, address indexed user, uint256 stakeID, uint256 stakeWithdrawn, uint256 rewardsPaid
     );
     event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
     event KeyParametersUpdated(address indexed by, address indexed newRewardsManager);
@@ -347,7 +347,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         stake.rewardDebt = accumulatedStakeRewards(_index);
         stake.bonusRewardDebt = accumulatedStakeBonusRewards(_index);
         totalStaked -= _amount;
-        emit Withdrawn(msg.sender, _amount);
+        emit Withdrawn(msg.sender, _amount, pending + pendingBonus);
     }
 
     function withdrawAll(uint16 _index) external validIndex(_index) nonReentrant {
@@ -377,7 +377,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         totalStaked -= amountWithdrawn;
         stake.rewardDebt = 0;
         stake.bonusRewardDebt = 0;
-        emit Withdrawn(msg.sender, amountWithdrawn);
+        emit Withdrawn(msg.sender, amountWithdrawn, pending + pendingBonus);
     }
 
     function earlyWithdraw(uint256 _amount, uint16 _index) external validAmount(_amount) validIndex(_index) nonReentrant{
@@ -424,20 +424,22 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             stake.bonusRewardDebt = accumulatedStakeBonusRewards(_index);
         }
         totalStaked -= deduction;
-        emit Withdrawn(msg.sender, _amount);
+        emit Withdrawn(msg.sender, _amount, pending + pendingBonus);
         emit EarlyWithdrawalPenalized(msg.sender, block.number, penalty);
     }
 
-    function emergencyWithdraw() external nonReentrant onlyRole(STAKING_ADMIN_ROLE) nonReentrant{
+    // Treat the emergencyWithdraw function with caution, It withdraws all user stakes to their wallets. 
+    // Only use when there is a serious issue with the staking pool.
+    function emergencyWithdraw() external onlyRole(STAKING_ADMIN_ROLE) nonReentrant{
         require(!emergencyFuncCalled, AlreadyTriggered());
         emergencyFuncCalled = true;
         uint256 currentQuarterIndex = getCurrentQuarterIndex();
+        updatePool();
         for (uint32 i; i < users.length; i++) {
             address userAddr = users[i];
             for (uint16 j; j < userStakes[users[i]].length; j++) {
                 userStake storage stake = userStakes[users[i]][j];
 
-                updatePool();
                 if (stake.amountStaked > 0) {
                     uint256 pending = Math.mulDiv(stake.amountStaked, accJudgePerShare, SCALE) - stake.rewardDebt;
                     uint256 pendingBonus = Math.mulDiv(stake.amountStaked, accBonusJudgePerShare, SCALE) - stake.bonusRewardDebt;
@@ -445,9 +447,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
                     uint256 amount = stake.amountStaked;
 
-                    rewardsManager.sendRewards(msg.sender, pending);
+                    rewardsManager.sendRewards(userAddr, pending);
                     quarterRewardsPaid[currentQuarterIndex] += pending;
-                    rewardsManager.sendBonus(msg.sender, pendingBonus);
+                    rewardsManager.sendBonus(userAddr, pendingBonus);
                     quarterBonusRewardsPaid[currentQuarterIndex] += pendingBonus;
                     judgeToken.safeTransfer(userAddr, amount);
 
@@ -457,7 +459,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                     totalStaked -= amount;
                     stake.rewardDebt = 0;
                     stake.bonusRewardDebt = 0;
-                    emit EmergencyWithdrawal(msg.sender, userAddr, stake.id, amount, pending);
+                    emit EmergencyWithdrawal(msg.sender, userAddr, stake.id, amount, pending + pendingBonus);
                 }
             }
         }
