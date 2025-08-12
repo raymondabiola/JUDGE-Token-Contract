@@ -43,6 +43,7 @@ contract JudgeStakingTest is Test{
     error InsufficientBalance();
     error NotYetMatured();
     error AlreadyMatured();
+    error AlreadyTriggered();
 
       struct userStake {
         uint64 id;
@@ -1021,6 +1022,61 @@ function testHowMuchUser1ReceivesAfterEmergencyWithdrawal()public{
     console.log("user1Stake2BonusRewardsExpected", user1Stake2BonusRewardsExpected);
     uint256 expectedTotalAmountReceivedByUser1 = 4e22 + 4e22 + user1Stake1RewardsExpected + user1Stake1BonusRewardsExpected + user1Stake2RewardsExpected + user1Stake2BonusRewardsExpected;
     assertApproxEqAbs(totalAmountWithdrawnToUser1, expectedTotalAmountReceivedByUser1, 60_000);
+}
+
+function testRevertsInEmergancyWithdrawal()public{
+    bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
+    uint256 reward = 1_000_000 * 10 ** uint256(decimals);
+    uint256 amount = 100_000 * 10 ** uint256(decimals);
+    uint256 bonus = 100_000 * 10 ** uint256(decimals);
+    uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
+    judgeToken.mint(user1, amount);
+    judgeToken.mint(user2, amount);
+
+    vm.prank(user1);
+    judgeToken.approve(address(judgeStaking), amount);
+
+    vm.roll(poolStartBlock);
+
+    judgeTreasury.setNewQuarterlyRewards(reward);
+    judgeTreasury.fundRewardsManager(1);
+
+    vm.prank(user1);
+    judgeStaking.deposit(40_000 * 10 ** uint256(decimals), 10);
+
+    vm.roll(poolStartBlock + 2000);
+    
+    judgeToken.approve(address(judgeTreasury), bonus);
+    judgeTreasury.addBonusToQuarterReward(bonus, 200_000);
+
+    vm.roll(poolStartBlock + 3000);
+    vm.prank(user1);
+    judgeStaking.deposit(40_000 * 10 ** uint256(decimals), 360);
+
+    vm.roll(poolStartBlock + 4000);
+    vm.startPrank(user2);
+    judgeToken.approve(address(judgeStaking), amount);
+    judgeStaking.deposit(60_000 * 10 ** uint256(decimals), 360);
+    vm.stopPrank();
+
+    vm.roll(poolStartBlock + 80_000);
+
+    vm.expectRevert(
+        abi.encodeWithSelector(
+            AccessControlUnauthorizedAccount.selector,
+            user3,
+            stakingAdmin
+        )
+    );
+
+    vm.prank(user3);
+    judgeStaking.emergencyWithdraw();
+
+    judgeStaking.emergencyWithdraw();
+
+    vm.expectRevert(AlreadyTriggered.selector);
+    judgeStaking.emergencyWithdraw();
+
 }
 
 function testViewMyStakes()public{

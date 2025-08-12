@@ -444,7 +444,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                     uint256 pending = Math.mulDiv(stake.stakeWeight, accJudgePerShare, SCALE) - stake.rewardDebt;
                     uint256 pendingBonus = Math.mulDiv(stake.stakeWeight, accBonusJudgePerShare, SCALE) - stake.bonusRewardDebt;
 
-
                     uint256 amount = stake.amountStaked;
 
                     rewardsManager.sendRewards(userAddr, pending);
