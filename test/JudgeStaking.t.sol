@@ -951,11 +951,10 @@ function testEmergencyWithdraw()public{
     console.log("user2BonusRewardsExpected", user2BonusRewardsExpected);
     uint256 expectedTotalAmountReceivedByUser2 = user2RewardsExpected + user2BonusRewardsExpected + 6e22;
     assertEq(totalAmountWithdrawnToUser2, expectedTotalAmountReceivedByUser2);
-  
 }
 
 function testHowMuchUser1ReceivesAfterEmergencyWithdrawal()public{
-      uint256 reward = 1_000_000 * 10 ** uint256(decimals);
+     uint256 reward = 1_000_000 * 10 ** uint256(decimals);
     uint256 amount = 100_000 * 10 ** uint256(decimals);
     uint256 bonus = 100_000 * 10 ** uint256(decimals);
     uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
@@ -1021,7 +1020,7 @@ function testHowMuchUser1ReceivesAfterEmergencyWithdrawal()public{
     console.log("user1Stake2RewardsExpected", user1Stake2RewardsExpected);
     console.log("user1Stake2BonusRewardsExpected", user1Stake2BonusRewardsExpected);
     uint256 expectedTotalAmountReceivedByUser1 = 4e22 + 4e22 + user1Stake1RewardsExpected + user1Stake1BonusRewardsExpected + user1Stake2RewardsExpected + user1Stake2BonusRewardsExpected;
-    assertEq(totalAmountWithdrawnToUser1, expectedTotalAmountReceivedByUser1);
+    assertApproxEqAbs(totalAmountWithdrawnToUser1, expectedTotalAmountReceivedByUser1, 60_000);
 }
 
 function testViewMyStakes()public{

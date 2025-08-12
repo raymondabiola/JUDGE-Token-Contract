@@ -428,8 +428,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit EarlyWithdrawalPenalized(msg.sender, block.number, penalty);
     }
 
-    // Treat the emergencyWithdraw function with caution, It withdraws all user stakes to their wallets. 
-    // Only use when there is a serious issue with the staking pool.
+    /* Treat the emergencyWithdraw function with caution, It withdraws all user stakes to their wallets. 
+     Only use when there is a serious issue with the staking pool. */
     function emergencyWithdraw() external onlyRole(STAKING_ADMIN_ROLE) nonReentrant{
         require(!emergencyFuncCalled, AlreadyTriggered());
         emergencyFuncCalled = true;
@@ -441,8 +441,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                 userStake storage stake = userStakes[users[i]][j];
 
                 if (stake.amountStaked > 0) {
-                    uint256 pending = Math.mulDiv(stake.amountStaked, accJudgePerShare, SCALE) - stake.rewardDebt;
-                    uint256 pendingBonus = Math.mulDiv(stake.amountStaked, accBonusJudgePerShare, SCALE) - stake.bonusRewardDebt;
+                    uint256 pending = Math.mulDiv(stake.stakeWeight, accJudgePerShare, SCALE) - stake.rewardDebt;
+                    uint256 pendingBonus = Math.mulDiv(stake.stakeWeight, accBonusJudgePerShare, SCALE) - stake.bonusRewardDebt;
 
 
                     uint256 amount = stake.amountStaked;
