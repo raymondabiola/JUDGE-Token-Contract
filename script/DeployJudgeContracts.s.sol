@@ -12,9 +12,14 @@ contract DeployJudgeContracts is Script{
         uint8 decimals = 18;
         uint8 earlyWithdrawPenaltyPercentForMaxLockupPeriod = 10;
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        address deployerAddress = vm.addr(deployerPrivateKey);
         uint256 initialSupply = 100_000 * 10 ** uint256(decimals);
+        uint8 feePercent = 10;
+        uint256 judgeRecoveryMinimumThreshold = 200;
+        uint8 updateEarlyWithdrawPenaltyPercentForMaxLockupPeriod = 10;
         vm.startBroadcast(deployerPrivateKey);
 
+        // Deploying contracts
         JudgeToken judgeToken = new JudgeToken(initialSupply);
         RewardsManager rewardsManager = new RewardsManager(address(judgeToken));
         JudgeStaking judgeStaking = new JudgeStaking(address(judgeToken), earlyWithdrawPenaltyPercentForMaxLockupPeriod);
@@ -26,16 +31,35 @@ contract DeployJudgeContracts is Script{
         bytes32 rewardsDistributor = rewardsManager.REWARDS_DISTRIBUTOR_ROLE();
         bytes32 treasuryPreciseBalanceUpdater = judgeTreasury.TREASURY_PRECISE_BALANCE_UPDATER();
 
+        bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
+        bytes32 rewardsManagerAdmin = rewardsManager.REWARDS_MANAGER_ADMIN_ROLE();
+        bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
+
+        // Set Key Parameters
         rewardsManager.setKeyParameter(address(judgeTreasury));
         judgeStaking.setKeyParameters(address(rewardsManager), address(judgeTreasury));
 
-        judgeToken.grantRole(minterRole, address(judgeTreasury));
 
+        // Key Role granting
+        judgeToken.grantRole(minterRole, address(judgeTreasury));
         rewardsManager.grantRole(rewardsManagerPreciseBalanceUpdater, address(judgeTreasury));
         judgeStaking.grantRole(rewardsPerBlockCalculator, address(judgeTreasury));
         rewardsManager.grantRole(rewardsDistributor, address(judgeStaking));
         judgeTreasury.grantRole(treasuryPreciseBalanceUpdater, address(judgeStaking));
         judgeTreasury.grantRole(treasuryPreciseBalanceUpdater, address(rewardsManager));
+
+        judgeTreasury.grantRole(treasuryAdmin, deployerAddress);
+        rewardsManager.grantRole(rewardsManagerAdmin, deployerAddress);
+        judgeStaking.grantRole(stakingAdmin, deployerAddress);
+
+        judgeTreasury.updateFeePercent(feePercent);
+        judgeTreasury.updateJudgeRecoveryMinimumThreshold(judgeRecoveryMinimumThreshold);
+        rewardsManager.updateFeePercent(feePercent);
+        rewardsManager.updateJudgeRecoveryMinimumThreshold(judgeRecoveryMinimumThreshold);
+        judgeStaking.updateFeePercent(feePercent);
+        judgeStaking.updateJudgeRecoveryMinimumThreshold(judgeRecoveryMinimumThreshold);
+
+        judgeStaking.updateEarlyWithdrawPenaltyPercentForMaxLockupPeriod(updateEarlyWithdrawPenaltyPercentForMaxLockupPeriod);
 
         vm.stopBroadcast();
     }

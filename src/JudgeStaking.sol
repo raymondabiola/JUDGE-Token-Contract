@@ -157,6 +157,19 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit EarlyWithdrawPenaltyPercentForMaxLockupPeriodUpdated(_earlyWithdrawPenaltyPercentForMaxLockupPeriod);
     }
 
+         function updateFeePercent(uint8 _newFeePercent) external onlyRole(STAKING_ADMIN_ROLE){
+        require(_newFeePercent < FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
+        uint8 oldFeePercent = feePercent;
+        feePercent = _newFeePercent;
+        emit FeePercentUpdated(oldFeePercent, _newFeePercent);
+    }
+
+    function updateJudgeRecoveryMinimumThreshold(uint256 newJudgeRecoveryMinimumThreshold) external onlyRole(STAKING_ADMIN_ROLE){
+        uint256 oldJudgeRecoveryMinimumThreshold = judgeRecoveryMinimumThreshold;
+        judgeRecoveryMinimumThreshold = newJudgeRecoveryMinimumThreshold;
+        emit JudgeRecoveryMinimumThresholdUpdated(oldJudgeRecoveryMinimumThreshold, newJudgeRecoveryMinimumThreshold);
+    }
+
     function getCurrentQuarterIndex()public view returns(uint256){
         return (block.number - stakingPoolStartBlock) / 648_000 + 1;
     }
@@ -203,19 +216,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 apr2 = Math.mulDiv(Math.mulDiv(bonusPerBlock, blocksPerYear, 1), 1e18, totalStakeWeight);
 
         return apr1 + apr2 ;
-    }
-
-     function updateFeePercent(uint8 _newFeePercent) external onlyRole(STAKING_ADMIN_ROLE){
-        require(_newFeePercent < FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
-        uint8 oldFeePercent = feePercent;
-        feePercent = _newFeePercent;
-        emit FeePercentUpdated(oldFeePercent, _newFeePercent);
-    }
-
-    function updateJudgeRecoveryMinimumThreshold(uint256 newJudgeRecoveryMinimumThreshold) external onlyRole(STAKING_ADMIN_ROLE){
-        uint256 oldJudgeRecoveryMinimumThreshold = judgeRecoveryMinimumThreshold;
-        judgeRecoveryMinimumThreshold = newJudgeRecoveryMinimumThreshold;
-        emit JudgeRecoveryMinimumThresholdUpdated(oldJudgeRecoveryMinimumThreshold, newJudgeRecoveryMinimumThreshold);
     }
 
     function updatePool() public {

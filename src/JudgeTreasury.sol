@@ -114,6 +114,19 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         emit KeyParametersUpdated(newRewardsManagerAddress, newJudgeStakingAddress);
     }
 
+     function updateFeePercent(uint8 _newFeePercent) external onlyRole(TREASURY_ADMIN_ROLE){
+        require(_newFeePercent < FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
+        uint8 oldFeePercent = feePercent;
+        feePercent = _newFeePercent;
+        emit FeePercentUpdated(oldFeePercent, _newFeePercent);
+    }
+
+    function updateJudgeRecoveryMinimumThreshold(uint256 newJudgeRecoveryMinimumThreshold) external onlyRole(TREASURY_ADMIN_ROLE){
+        uint256 oldJudgeRecoveryMinimumThreshold = judgeRecoveryMinimumThreshold;
+        judgeRecoveryMinimumThreshold = newJudgeRecoveryMinimumThreshold;
+        emit JudgeRecoveryMinimumThresholdUpdated(oldJudgeRecoveryMinimumThreshold, newJudgeRecoveryMinimumThreshold);
+    }
+
     function setNewQuarterlyRewards(uint256 _reward)public onlyRole(TREASURY_ADMIN_ROLE){
         require(_reward != 0, InvalidAmount());
         require(_reward >= MIN_QUARTERLY_REWARD_ALLOCATION && _reward <= MAX_QUARTERLY_REWARD_ALLOCATION, RewardsInputedOutOfDefinedRange());
@@ -135,19 +148,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         bonusEndBlock = block.number + _durationInBlocks;
     }
     
-    function updateFeePercent(uint8 _newFeePercent) external onlyRole(TREASURY_ADMIN_ROLE){
-        require(_newFeePercent < FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
-        uint8 oldFeePercent = feePercent;
-        feePercent = _newFeePercent;
-        emit FeePercentUpdated(oldFeePercent, _newFeePercent);
-    }
-
-    function updateJudgeRecoveryMinimumThreshold(uint256 newJudgeRecoveryMinimumThreshold) external onlyRole(TREASURY_ADMIN_ROLE){
-        uint256 oldJudgeRecoveryMinimumThreshold = judgeRecoveryMinimumThreshold;
-        judgeRecoveryMinimumThreshold = newJudgeRecoveryMinimumThreshold;
-        emit JudgeRecoveryMinimumThresholdUpdated(oldJudgeRecoveryMinimumThreshold, newJudgeRecoveryMinimumThreshold);
-    }
-
     // Assign the trasury precise balance updater to JudgeStaking contract and Rewards Manager Contract
     function increaseTreasuryPreciseBalance(uint256 _amount)external onlyRole(TREASURY_PRECISE_BALANCE_UPDATER){
         treasuryPreciseBalance += _amount;

@@ -81,16 +81,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         emit JudgeTreasuryAdressUpdated(_judgeTreasuryAddress);
     }
 
-    // Assign this role to the JudgeTreasury contract from deployment script
-    function increaseRewardsManagerPreciseBalance(uint256 _amount)external onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER){
-        rewardsManagerPreciseBalance += _amount;
-    }
-
-    function increaseRewardsManagerBonusBalance(uint256 _amount) external onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER){
-        rewardsManagerBonusBalance += _amount;
-    }
-
-     function updateFeePercent(uint8 _newFeePercent) external onlyRole(REWARDS_MANAGER_ADMIN_ROLE){
+    function updateFeePercent(uint8 _newFeePercent) external onlyRole(REWARDS_MANAGER_ADMIN_ROLE){
         require(_newFeePercent < FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
         uint8 oldFeePercent = feePercent;
         feePercent = _newFeePercent;
@@ -101,6 +92,15 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         uint256 oldJudgeRecoveryMinimumThreshold = judgeRecoveryMinimumThreshold;
         judgeRecoveryMinimumThreshold = newJudgeRecoveryMinimumThreshold;
         emit JudgeRecoveryMinimumThresholdUpdated(oldJudgeRecoveryMinimumThreshold, newJudgeRecoveryMinimumThreshold);
+    }
+
+    // Assign this role to the JudgeTreasury contract from deployment script
+    function increaseRewardsManagerPreciseBalance(uint256 _amount)external onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER){
+        rewardsManagerPreciseBalance += _amount;
+    }
+
+    function increaseRewardsManagerBonusBalance(uint256 _amount) external onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER){
+        rewardsManagerBonusBalance += _amount;
     }
 
     // Grant the rewards distributor role to the judge staking contract in the deployment script.
