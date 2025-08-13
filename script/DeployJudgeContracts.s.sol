@@ -36,8 +36,9 @@ contract DeployJudgeContracts is Script{
         bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
 
         // Set Key Parameters
-        rewardsManager.setKeyParameter(address(judgeTreasury));
-        judgeStaking.setKeyParameters(address(rewardsManager), address(judgeTreasury));
+        rewardsManager.setJudgeTreasuryAddress(address(judgeTreasury));
+        judgeStaking.setRewardsManagerAddress(address(rewardsManager));
+         judgeStaking.setJudgeTreasuryAddress(address(judgeTreasury));
 
 
         // Key Role granting

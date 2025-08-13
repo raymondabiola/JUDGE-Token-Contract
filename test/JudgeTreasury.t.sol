@@ -64,7 +64,8 @@ rewardsManager.grantRole(rewardsManagerPreciseBalanceUpdater, address(judgeTreas
 judgeStaking.grantRole(rewardsPerBlockCalculator, address(judgeTreasury));
 judgeTreasury.updateFeePercent(10);
 judgeTreasury.updateJudgeRecoveryMinimumThreshold(200 * 10 ** uint256(decimals));
-judgeStaking.setKeyParameters(address(rewardsManager), address(judgeTreasury));
+judgeStaking.setRewardsManagerAddress(address(rewardsManager));
+judgeStaking.setJudgeTreasuryAddress(address(judgeTreasury));
 
 sampleERC20 = new SampleERC20();
 }
@@ -78,36 +79,18 @@ bytes32 defaultAdmin = judgeTreasury.DEFAULT_ADMIN_ROLE();
 assertTrue(judgeTreasury.hasRole(defaultAdmin, owner));
 }
 
-function testUpdateKeyParameters() public{
+function testSetRewardsManagerAddress() public{
     bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
     judgeTreasury.grantRole(treasuryAdmin, owner);
 
     vm.expectRevert(EOANotAllowed.selector);
-judgeTreasury.updateKeyParameters(user1, address(judgeToken));
-
- vm.expectRevert(EOANotAllowed.selector);
- judgeTreasury.updateKeyParameters(address(judgeToken), user1);
-
-  vm.expectRevert(EOANotAllowed.selector);
- judgeTreasury.updateKeyParameters(user2, user1);
+judgeTreasury.setRewardsManagerAddress(user1);
 
 vm.expectRevert(InvalidAddress.selector);
-judgeTreasury.updateKeyParameters(zeroAddress, address(judgeToken));
-
-vm.expectRevert(InvalidAddress.selector);
-judgeTreasury.updateKeyParameters(address(judgeToken), zeroAddress);
-
-vm.expectRevert(InvalidAddress.selector);
-judgeTreasury.updateKeyParameters(zeroAddress, zeroAddress);
+judgeTreasury.setRewardsManagerAddress(zeroAddress);
 
 vm.expectRevert(CannotInputThisContractAddress.selector);
-judgeTreasury.updateKeyParameters(address(judgeTreasury), address(judgeToken));
-
-vm.expectRevert(CannotInputThisContractAddress.selector);
-judgeTreasury.updateKeyParameters(address(judgeToken), address(judgeTreasury));
-
-vm.expectRevert(CannotInputThisContractAddress.selector);
-judgeTreasury.updateKeyParameters(address(judgeTreasury), address(judgeTreasury));
+judgeTreasury.setRewardsManagerAddress(address(judgeTreasury));
 
 vm.expectRevert(
     abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector,
@@ -115,11 +98,36 @@ vm.expectRevert(
     treasuryAdmin)
 );
 vm.prank(user1);
-judgeTreasury.updateKeyParameters(address(judgeToken), address(judgeToken));
+judgeTreasury.setRewardsManagerAddress(address(judgeToken));
 
 // using judgeToken contract as example for input. Test purposes only
-judgeTreasury.updateKeyParameters(address(judgeToken), address(judgeToken));
+judgeTreasury.setRewardsManagerAddress(address(judgeToken));
 assertEq(address(judgeTreasury.rewardsManager()), address(judgeToken));
+}
+
+function testSetJudgeStakingAddress() public{
+    bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
+    judgeTreasury.grantRole(treasuryAdmin, owner);
+
+    vm.expectRevert(EOANotAllowed.selector);
+judgeTreasury.setJudgeStakingAddress(user1);
+
+vm.expectRevert(InvalidAddress.selector);
+judgeTreasury.setJudgeStakingAddress(zeroAddress);
+
+vm.expectRevert(CannotInputThisContractAddress.selector);
+judgeTreasury.setJudgeStakingAddress(address(judgeTreasury));
+
+vm.expectRevert(
+    abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector,
+    user1,
+    treasuryAdmin)
+);
+vm.prank(user1);
+judgeTreasury.setJudgeStakingAddress(address(judgeToken));
+
+// using judgeToken contract as example for input. Test purposes only
+judgeTreasury.setJudgeStakingAddress(address(judgeToken));
 assertEq(address(judgeTreasury.judgeStaking()), address(judgeToken));
 }
 

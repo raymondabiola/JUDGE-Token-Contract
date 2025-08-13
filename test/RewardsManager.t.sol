@@ -48,7 +48,7 @@ contract RewardsManagerTest is Test{
     judgeTreasury = new JudgeTreasury(address(judgeToken), address(rewardsManager), address(judgeStaking));
     bytes32 rewardsManagerAdmin = rewardsManager.REWARDS_MANAGER_ADMIN_ROLE();
     rewardsManager.grantRole(rewardsManagerAdmin, owner);
-    rewardsManager.setKeyParameter(address(judgeTreasury));
+    rewardsManager.setJudgeTreasuryAddress(address(judgeTreasury));
     bytes32 minterRole = judgeToken.MINTER_ROLE();
     bytes32 rewardsManagerPrecisebalanceUpdater = rewardsManager.REWARDS_MANAGER_PRECISE_BALANCE_UPDATER();
     bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
@@ -59,7 +59,8 @@ contract RewardsManagerTest is Test{
     judgeTreasury.grantRole(treasuryAdmin, owner);
     judgeStaking.grantRole(stakingAdmin, owner);
     judgeStaking.grantRole(rewardsPerBlockAdmin, address(judgeTreasury));
-    judgeStaking.setKeyParameters(address(rewardsManager), address(judgeTreasury));
+    judgeStaking.setRewardsManagerAddress(address(rewardsManager));
+    judgeStaking.setJudgeTreasuryAddress(address(judgeTreasury));
     
     sampleERC20 = new SampleERC20();
     }
@@ -79,19 +80,19 @@ contract RewardsManagerTest is Test{
         )
     );
     vm.prank(user1);
-    rewardsManager.setKeyParameter(address(judgeTreasury));
+    rewardsManager.setJudgeTreasuryAddress(address(judgeTreasury));
 
     vm.expectRevert(InvalidAddress.selector);
-    rewardsManager.setKeyParameter(zeroAddress);
+    rewardsManager.setJudgeTreasuryAddress(zeroAddress);
 
     vm.expectRevert(CannotInputThisContractAddress.selector);
-    rewardsManager.setKeyParameter(address(rewardsManager));
+    rewardsManager.setJudgeTreasuryAddress(address(rewardsManager));
 
     vm.expectRevert(EOANotAllowed.selector);
-    rewardsManager.setKeyParameter(user1);
+    rewardsManager.setJudgeTreasuryAddress(user1);
 
     // For testing purpose we are using judgeToken address as placeholder for new treasury contract
-    rewardsManager.setKeyParameter(address(judgeToken));
+    rewardsManager.setJudgeTreasuryAddress(address(judgeToken));
     assertEq(address(rewardsManager.judgeTreasury()), address(judgeToken));
     }
 

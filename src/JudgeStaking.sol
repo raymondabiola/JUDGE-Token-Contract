@@ -74,7 +74,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         address indexed admin, address indexed user, uint256 stakeID, uint256 stakeWithdrawn, uint256 rewardsPaid
     );
     event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
-    event KeyParametersUpdated(address indexed by, address indexed newRewardsManager);
+    event RewardsManagerAddressUpdated(address indexed newRewardsManagerAddress);
+    event JudgeTreasuryAddressUpdated(address indexed newJudgeTreasuryAddress);
     event JudgeRecoveryMinimumThresholdUpdated(uint256 oldValue, uint256 newValue);
     event EarlyWithdrawPenaltyPercentForMaxLockupPeriodInitialized(uint256 newValue);
     event EarlyWithdrawPenaltyPercentForMaxLockupPeriodUpdated(uint256 newValue);
@@ -138,14 +139,19 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         _;
     }
 
-    function setKeyParameters(address _rewardsManagerAddress, address _judgeTreasuryAddress) external onlyRole(STAKING_ADMIN_ROLE) {
-        require(_rewardsManagerAddress != address(0) && _judgeTreasuryAddress != address(0), InvalidAddress());
-        require(_rewardsManagerAddress != address(this) && _judgeTreasuryAddress != address(this), CannotInputThisContractAddress());
-        require(_rewardsManagerAddress.code.length > 0 && _judgeTreasuryAddress.code.length > 0, EOANotAllowed());
+        modifier notEOA(address _addr){
+        require(_addr.code.length > 0, EOANotAllowed());
+        _;
+    }
 
+    function setRewardsManagerAddress(address _rewardsManagerAddress) external onlyRole(STAKING_ADMIN_ROLE) validAddress(_rewardsManagerAddress) notSelf(_rewardsManagerAddress) notEOA(_rewardsManagerAddress) {
         rewardsManager = IRewardsManager(_rewardsManagerAddress);
+        emit RewardsManagerAddressUpdated(_rewardsManagerAddress);
+    }
+
+        function setJudgeTreasuryAddress(address _judgeTreasuryAddress) external onlyRole(STAKING_ADMIN_ROLE) validAddress(_judgeTreasuryAddress) notSelf(_judgeTreasuryAddress) notEOA(_judgeTreasuryAddress) {
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
-        emit KeyParametersUpdated(msg.sender, _rewardsManagerAddress);
+        emit JudgeTreasuryAddressUpdated(_judgeTreasuryAddress);
     }
 
     function updateEarlyWithdrawPenaltyPercentForMaxLockupPeriod(uint8 _earlyWithdrawPenaltyPercentForMaxLockupPeriod)

@@ -73,7 +73,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
          _;
     }
 
-    function setKeyParameter(address _judgeTreasuryAddress) external validAddress(_judgeTreasuryAddress) notSelf(_judgeTreasuryAddress) onlyRole(REWARDS_MANAGER_ADMIN_ROLE) {
+    function setJudgeTreasuryAddress(address _judgeTreasuryAddress) external validAddress(_judgeTreasuryAddress) notSelf(_judgeTreasuryAddress) onlyRole(REWARDS_MANAGER_ADMIN_ROLE) {
         require(_judgeTreasuryAddress.code.length > 0, EOANotAllowed());
         
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);

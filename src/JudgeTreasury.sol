@@ -43,7 +43,8 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
     event RewardsManagerAddressInitialized(address indexed rewardsManagerAddress);
-    event KeyParametersUpdated( address indexed newRewardsManagerAddress, address indexed newJudgeStakingAddress);
+    event RewardsManagerAddressUpdated( address indexed newRewardsManagerAddress);
+    event JudgeStakingAddressUpdated( address indexed newJudgeStakingAddress);
     event FeePercentUpdated(uint8 oldValue, uint8 newValue);
     event JudgeRecoveryMinimumThresholdUpdated(uint256 oldValue, uint256 newValue);
     event RewardsManagerFunded(uint256 amount);
@@ -104,14 +105,20 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         _;
     }
 
-    function updateKeyParameters(address newRewardsManagerAddress, address newJudgeStakingAddress) external onlyRole(TREASURY_ADMIN_ROLE) {
-        require(newRewardsManagerAddress != address(0) && newJudgeStakingAddress != address(0), InvalidAddress());
-        require(newRewardsManagerAddress != address(this) && newJudgeStakingAddress != address(this), CannotInputThisContractAddress());
-        require(newRewardsManagerAddress.code.length > 0 && newJudgeStakingAddress.code.length > 0, EOANotAllowed());
+    modifier notEOA(address _addr){
+        require(_addr.code.length > 0, EOANotAllowed());
+        _;
+    }
+
+    function setRewardsManagerAddress(address newRewardsManagerAddress) external onlyRole(TREASURY_ADMIN_ROLE) validAddress(newRewardsManagerAddress) notSelf(newRewardsManagerAddress) notEOA(newRewardsManagerAddress) {
         rewardsManager = RewardsManager(newRewardsManagerAddress);
+        emit RewardsManagerAddressUpdated(newRewardsManagerAddress);
+    }
+
+    function setJudgeStakingAddress(address newJudgeStakingAddress) external onlyRole(TREASURY_ADMIN_ROLE) validAddress(newJudgeStakingAddress) notSelf(newJudgeStakingAddress) notEOA(newJudgeStakingAddress){
         judgeStaking = JudgeStaking(newJudgeStakingAddress);
 
-        emit KeyParametersUpdated(newRewardsManagerAddress, newJudgeStakingAddress);
+        emit JudgeStakingAddressUpdated(newJudgeStakingAddress);
     }
 
      function updateFeePercent(uint8 _newFeePercent) external onlyRole(TREASURY_ADMIN_ROLE){
