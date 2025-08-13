@@ -16,11 +16,11 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     JudgeToken public judgeToken;
     JudgeTreasury public judgeTreasury;
 
-    bytes32 public constant REWARDS_DISTRIBUTOR_ROLE = keccak256("REWARDS_DISTRIBUTOR_ROLE");
+    bytes32 public constant REWARDS_DISTRIBUTOR_ROLE = keccak256("REWARDS_DISTRIBUTOR_ROLE"); //Assign to judgeStaking on deployment
     bytes32 public constant REWARDS_MANAGER_ADMIN_ROLE = keccak256("REWARDS_MANAGER_ADMIN_ROLE");
     bytes32 public constant TOKEN_RECOVERY_ROLE = keccak256("TOKEN_RECOVERY_ROLE");
     bytes32 public constant FUND_MANAGER_ROLE = keccak256("FUND_MANAGER_ROLE");
-    bytes32 public constant REWARDS_MANAGER_PRECISE_BALANCE_UPDATER = keccak256("REWARDS_MANAGER_PRECISE_BALANCE_UPDATER");
+    bytes32 public constant REWARDS_MANAGER_PRECISE_BALANCE_UPDATER = keccak256("REWARDS_MANAGER_PRECISE_BALANCE_UPDATER"); //Assign Role to judgeTreasury at deployment
     
     uint256 public totalRewardsPaid;
     uint8 public feePercent;
@@ -73,6 +73,14 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
          _;
     }
 
+    function setKeyParameter(address _judgeTreasuryAddress) external validAddress(_judgeTreasuryAddress) notSelf(_judgeTreasuryAddress) onlyRole(REWARDS_MANAGER_ADMIN_ROLE) {
+        require(_judgeTreasuryAddress.code.length > 0, EOANotAllowed());
+        
+        judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
+
+        emit JudgeTreasuryAdressUpdated(_judgeTreasuryAddress);
+    }
+
     // Assign this role to the JudgeTreasury contract from deployment script
     function increaseRewardsManagerPreciseBalance(uint256 _amount)external onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER){
         rewardsManagerPreciseBalance += _amount;
@@ -80,14 +88,6 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
 
     function increaseRewardsManagerBonusBalance(uint256 _amount) external onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER){
         rewardsManagerBonusBalance += _amount;
-    }
-
-    function setKeyParameter(address _judgeTreasuryAddress) external validAddress(_judgeTreasuryAddress) notSelf(_judgeTreasuryAddress) onlyRole(REWARDS_MANAGER_ADMIN_ROLE) {
-        require(_judgeTreasuryAddress.code.length > 0, EOANotAllowed());
-        
-        judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
-
-        emit JudgeTreasuryAdressUpdated(_judgeTreasuryAddress);
     }
 
      function updateFeePercent(uint8 _newFeePercent) external onlyRole(REWARDS_MANAGER_ADMIN_ROLE){

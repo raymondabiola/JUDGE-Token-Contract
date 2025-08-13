@@ -55,13 +55,13 @@ judgeTreasury = new JudgeTreasury(address(judgeToken), address(rewardsManager), 
 bytes32 minterRole = judgeToken.MINTER_ROLE();
 bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
 bytes32 rewardsManagerPreciseBalanceUpdater = rewardsManager.REWARDS_MANAGER_PRECISE_BALANCE_UPDATER();
-bytes32 rewardsPerBlockAdmin = judgeStaking.REWARDS_PER_BLOCK_CALCULATOR();
+bytes32 rewardsPerBlockCalculator = judgeStaking.REWARDS_PER_BLOCK_CALCULATOR();
 bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
 judgeToken.grantRole(minterRole, address(judgeTreasury));
 judgeTreasury.grantRole(treasuryAdmin, owner);
 judgeStaking.grantRole(stakingAdmin, owner);
 rewardsManager.grantRole(rewardsManagerPreciseBalanceUpdater, address(judgeTreasury));
-judgeStaking.grantRole(rewardsPerBlockAdmin, address(judgeTreasury));
+judgeStaking.grantRole(rewardsPerBlockCalculator, address(judgeTreasury));
 judgeTreasury.updateFeePercent(10);
 judgeTreasury.updateJudgeRecoveryMinimumThreshold(200 * 10 ** uint256(decimals));
 judgeStaking.setKeyParameters(address(rewardsManager), address(judgeTreasury));
