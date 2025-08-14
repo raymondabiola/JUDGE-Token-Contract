@@ -7,7 +7,7 @@ import "../src/JudgeTreasury.sol";
 import "../src/RewardsManager.sol";
 import "../src/JudgeStaking.sol";
 
-contract DeployJudgeContracts is Script{
+contract DeployJudgeContracts is Script{                                            
      function run() external {
         uint8 decimals = 18;
         uint8 earlyWithdrawPenaltyPercentForMaxLockupPeriod = 10;
@@ -38,7 +38,7 @@ contract DeployJudgeContracts is Script{
         // Set Key Parameters
         rewardsManager.setJudgeTreasuryAddress(address(judgeTreasury));
         judgeStaking.setRewardsManagerAddress(address(rewardsManager));
-         judgeStaking.setJudgeTreasuryAddress(address(judgeTreasury));
+        judgeStaking.setJudgeTreasuryAddress(address(judgeTreasury));
 
 
         // Key Role granting

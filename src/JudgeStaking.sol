@@ -28,25 +28,25 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     uint256 public stakingPoolStartBlock;
     uint64 private newStakeId;
-    uint256 public accJudgePerShare;
-    uint256 public  accBonusJudgePerShare;
-    uint256 public rewardsPerBlock;
+    uint256 public accJudgePerShare;  //cummulated JUDGE base rewards that a single JUDGE token stake weight is expected to receive
+    uint256 public  accBonusJudgePerShare; //cummulated JUDGE bonus rewards that a single JUDGE token stake weight is expected to receive
+    uint256 public rewardsPerBlock; 
     uint256 public bonusPerBlock;
     uint256 public lastRewardBlock;
-    uint256 public totalStakeWeight;
+    uint256 public totalStakeWeight; //The total calculated stake weights of all stakers based on the stake amount and chosen lockup period.
     uint256 public totalStaked;
     uint64 private constant SCALE = 1e18;
     address[] internal users;
     uint16 private constant maxLockUpPeriod = 360;
-    uint8 public earlyWithdrawPenaltyPercentForMaxLockupPeriod;
-    uint256 public totalPenalties;
-    bool public emergencyFuncCalled;
+    uint8 public earlyWithdrawPenaltyPercentForMaxLockupPeriod; //This is the penalty percent that is charged on a user stake if they
+    //lockup for 360 days maxLockUpPeriod and withdraw early, for lower lockUpPeriods, the penalty is scaled down based on duration/maxLockUpPeriod
+    uint256 public totalPenalties; //total penalty fees recieved for all users who did unripe withdrawals
+    bool public emergencyFuncCalled; //Boolean prevents the emergency function from being called more than once
     uint8 public constant maxPenaltyPercent = 20;
-    uint8 public feePercent;
+    uint8 public feePercent; //Fee charged to recover misplaced JudgeTokens sent to the contract
     uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30;
-    uint256 public judgeRecoveryMinimumThreshold;
+    uint256 public judgeRecoveryMinimumThreshold; //Feasible minimum amount of JudgeTokens that's worth recovering
 
-    mapping(address => uint256) public feeBalanceOfStrandedToken;
 
     struct userStake {
         uint64 id;
@@ -60,12 +60,13 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 maturityBlockNumber;
     }
 
-    mapping(address => userStake[]) internal userStakes;
-    mapping(address => bool) internal isUser;
-    mapping(uint256 => uint256) public quarterRewardsPaid;
-    mapping(uint256 => uint256) public quarterBonusRewardsPaid;
-    mapping(uint256 => uint256) public quarterAccruedRewardsForStakes;
-     mapping(uint256 => uint256) public quarterAccruedBonusRewardsForStakes;
+    mapping(address => userStake[]) internal userStakes; //Mapping that maps every userStakes as a struct array to their address
+    mapping(address => bool) internal isUser; //Mapping checks if a user address has staked before, preventing duplicate address in userlist
+    mapping(uint256 => uint256) public quarterRewardsPaid; //Maps total base rewards claimed in each quarter
+    mapping(uint256 => uint256) public quarterBonusRewardsPaid; //Maps total bonus rewards claimed in each quarter
+    mapping(uint256 => uint256) public quarterAccruedRewardsForStakes; //Maps total base rewards accrued (both claimed and pending) in each quarter
+    mapping(uint256 => uint256) public quarterAccruedBonusRewardsForStakes; //Maps total bonus rewards accrued (both claimed and pending) in each quarter
+    mapping(address => uint256) public feeBalanceOfStrandedToken; //mapping of accumulated fee of recovered misplaced tokens
 
     event RewardsFunded(uint256 amount);
     event Deposited(address indexed user, uint256 amount);
@@ -434,8 +435,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit EarlyWithdrawalPenalized(msg.sender, block.number, penalty);
     }
 
-    /* Treat the emergencyWithdraw function with caution, It withdraws all user stakes to their wallets. 
-     Only use when there is a serious issue with the staking pool. */
+    /* Treat the emergencyWithdraw function with caution, It is an exit route and when called withdraws all user stakes 
+    to their wallets. Only use when there is a serious issue with the staking pool.*/
     function emergencyWithdraw() external onlyRole(STAKING_ADMIN_ROLE) nonReentrant{
         require(!emergencyFuncCalled, AlreadyTriggered());
         emergencyFuncCalled = true;
@@ -470,9 +471,24 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
     }
 
-    function calculateUnclaimedAccruedRewards()external view returns(uint256){
-     uint256 currentQuarterIndex = getCurrentQuarterIndex();
-     return quarterAccruedRewardsForStakes[currentQuarterIndex] - quarterRewardsPaid[currentQuarterIndex];
+    function calculateTotalUnclaimedRewards()external view returns(uint256){
+    uint256 currentQuarterIndex = getCurrentQuarterIndex();
+
+    uint256 tempQuarterAccruedRewards = quarterAccruedRewardsForStakes[currentQuarterIndex];
+    uint256 tempQuarterAccruedBonusRewards = quarterAccruedBonusRewardsForStakes[currentQuarterIndex];
+
+    uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex-1) * 648_000;
+    uint256 blocksPassed = block.number - lastRewardBlock;
+    uint256 bonusBlocksPassed = judgeTreasury.bonusEndBlock() > lastRewardBlock ? Math.min(blocksPassed, judgeTreasury.bonusEndBlock() - lastRewardBlock) : 0;
+    uint256 totalBonusReward = bonusBlocksPassed * bonusPerBlock;
+
+      uint256 blocksPassedSinceQuarterStart = block.number - quarterStart;
+         tempQuarterAccruedRewards = blocksPassedSinceQuarterStart * rewardsPerBlock;
+        tempQuarterAccruedBonusRewards += totalBonusReward;
+
+     uint256 unClaimedBaseRewards = tempQuarterAccruedRewards - quarterRewardsPaid[currentQuarterIndex];
+     uint256 unClaimedBonusRewards = tempQuarterAccruedBonusRewards - quarterBonusRewardsPaid[currentQuarterIndex];
+    return unClaimedBaseRewards + unClaimedBonusRewards;
     }
 
     function viewMyStakes() external view returns (userStake[] memory) {
@@ -501,7 +517,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return userStakes[addr][_index];
     }
 
-    function viewMyEstimatedPendingRewards(uint16 _index) external view validIndex(_index) returns (uint256) {
+    function viewMyPendingRewards(uint16 _index) external view validIndex(_index) returns (uint256) {
         userStake memory stake = userStakes[msg.sender][_index];
         uint256 tempAccJudgePerShare = accJudgePerShare;
         uint256 tempAccBonusJudgePerShare = accBonusJudgePerShare;

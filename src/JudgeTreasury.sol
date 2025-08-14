@@ -23,23 +23,23 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     bytes32 public constant TOKEN_RECOVERY_ROLE = keccak256("TOKEN_RECOVERY_ROLE");
     bytes32 public constant TREASURY_PRECISE_BALANCE_UPDATER = keccak256("TREASURY_PRECISE_BALANCE_UPDATER"); //Assign to judgeStaking on deployment
 
-    uint256 public stakingRewardsFundsFromTreasury;
-    uint256 public teamFundingReceived;
-    uint256 public treasuryPreciseBalance;
-    uint8 public feePercent;     //Fee to recover mistakenly sent funds from contract
+    uint256 public stakingRewardsFundsFromTreasury; //Total rewards sent to rewardsManager From treasury excluding bonus rewards.
+    uint256 public teamFundingReceived; 
+    uint256 public treasuryPreciseBalance; //Exact total amount of judgeTokens in treasury contract excluding misplaced judgeTokens
+    uint8 public feePercent;     //Fee charged to recover misplaced JudgeTokens sent to the contract
     uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30; 
-    uint256 public judgeRecoveryMinimumThreshold;
-    uint256 public immutable MIN_QUARTERLY_REWARD_ALLOCATION;
-    uint256 public immutable MAX_QUARTERLY_REWARD_ALLOCATION;
+    uint256 public judgeRecoveryMinimumThreshold;  //Feasible minimum amount of JudgeTokens that's worth recovering
+    uint256 public immutable MIN_QUARTERLY_REWARD_ALLOCATION; //Lower bound of quarterly reward allocation
+    uint256 public immutable MAX_QUARTERLY_REWARD_ALLOCATION; //Upper bound of quarterly reward allocation
 
     uint8 public decimals;
     uint256 quarterIndex;
-    uint256 public bonusEndBlock;
+    uint256 public bonusEndBlock; //If there are bonus rewards, they can be sent for distribution while setting the number of blocks the bonus will run for
     
-    mapping(uint256 => bool) public setQuarterlyRewardsAtIndexWasPaidToRewardsManager;
+    mapping(uint256 => bool) public setQuarterlyRewardsAtIndexWasPaidToRewardsManager; 
     mapping(uint256 => uint256)public quarterlyRewards; //mapping of base quarterly rewards;
     mapping(uint256 => uint256) public additionalQuarterRewards; //mapping of additional rewards
-    mapping(address => uint256) public feeBalanceOfStrandedToken;
+    mapping(address => uint256) public feeBalanceOfStrandedToken; //mapping of accumulated fee of recovered misplaced tokens
 
     event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
     event RewardsManagerAddressInitialized(address indexed rewardsManagerAddress);
@@ -155,7 +155,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         bonusEndBlock = block.number + _durationInBlocks;
     }
     
-    // Assign the trasury precise balance updater to JudgeStaking contract and Rewards Manager Contract
+    // Assign the treasury precise balance updater role to JudgeStaking contract and Rewards Manager Contract
     function increaseTreasuryPreciseBalance(uint256 _amount)external onlyRole(TREASURY_PRECISE_BALANCE_UPDATER){
         treasuryPreciseBalance += _amount;
     }
@@ -188,7 +188,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     function fundTeamDevelopment(address _addr, uint256 _amount) external validAddress(_addr) validAmount(_amount) onlyRole(FUND_MANAGER_ROLE) nonReentrant{
        require(teamFundingReceived < judgeToken.MAX_TEAM_ALLOCATION(), TeamDevelopmentAllocationExceeded());
         require(_amount <= judgeToken.MAX_TEAM_ALLOCATION() - teamFundingReceived, ExceedsRemainingAllocation());
-        judgeToken.mintFromAllocation(msg.sender, _amount);
+        judgeToken.mintFromAllocation(_addr, _amount);
         teamFundingReceived += _amount;
         emit TeamDevelopmentWasFunded(_addr, _amount);
     }

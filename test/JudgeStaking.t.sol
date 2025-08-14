@@ -378,7 +378,7 @@ assertEq(judgeStaking.totalStaked(), depositAmount + depositAmount2);
 assertEq(judgeToken.balanceOf(user1), amount - depositAmount - depositAmount2);
 }
 
-function logRewards(address user, uint256 balanceAfter, uint256 balanceBefore, string memory label) internal pure returns(uint256){
+function logRewards(uint256 balanceAfter, uint256 balanceBefore, string memory label) internal pure returns(uint256){
     console.log(label, balanceAfter - balanceBefore);
     return balanceAfter - balanceBefore;
 }
@@ -431,19 +431,19 @@ judgeStaking.claimRewards(0);
 uint256 accJudgePerShareAfter100kBlocks = judgeStaking.accJudgePerShare();
 console.log("AccJudgePerShareAfter100kBlocks", accJudgePerShareAfter100kBlocks);
 uint256 user1BalanceAfterFirstClaim = judgeToken.balanceOf(user1);
-logRewards(user1, user1BalanceAfterFirstClaim, user1BalanceAfterDeposit, "user1 first rewards");
+logRewards(user1BalanceAfterFirstClaim, user1BalanceAfterDeposit, "user1 first rewards");
 
 vm.prank(user2);
 judgeStaking.claimRewards(0);
 
 uint256 user2BalanceAfterFirstClaim = judgeToken.balanceOf(user2);
-logRewards(user2, user2BalanceAfterFirstClaim, user2BalanceAfterDeposit, "user2 first rewards");
+logRewards(user2BalanceAfterFirstClaim, user2BalanceAfterDeposit, "user2 first rewards");
 
 vm.prank(user3);
 judgeStaking.claimRewards(0);
 
 uint256 user3BalanceAfterFirstClaim = judgeToken.balanceOf(user3);
-logRewards(user3, user3BalanceAfterFirstClaim, user3BalanceAfterDeposit, "user3 first Rewards");
+logRewards(user3BalanceAfterFirstClaim, user3BalanceAfterDeposit, "user3 first Rewards");
 
 
 assertEq(user3BalanceAfterFirstClaim - user3BalanceAfterDeposit, user2BalanceAfterFirstClaim - user2BalanceAfterDeposit);
@@ -467,13 +467,13 @@ uint256 accumuJudgePershareAfterSecondClaim = judgeStaking.accJudgePerShare();
 console.log("AccumuJudgePerShareAfterSecondClaim", accumuJudgePershareAfterSecondClaim);
 
 uint256 user1BalanceAfterSecondClaim = judgeToken.balanceOf(user1);
-logRewards(user1, user1BalanceAfterSecondClaim, user1BalanceAfterFirstClaim, "user1 second rewards");
+logRewards(user1BalanceAfterSecondClaim, user1BalanceAfterFirstClaim, "user1 second rewards");
 
 vm.prank(user2);
 judgeStaking.claimRewards(0);
 
 uint256 user2BalanceAfterSecondClaim = judgeToken.balanceOf(user2);
-logRewards(user2, user2BalanceAfterSecondClaim, user2BalanceAfterFirstClaim, "user2 second rewards");
+logRewards(user2BalanceAfterSecondClaim, user2BalanceAfterFirstClaim, "user2 second rewards");
 
 }
 
@@ -519,13 +519,13 @@ judgeStaking.claimRewards(0);
 uint256 accJudgePerShareAfter100kBlocks = judgeStaking.accJudgePerShare();
 console.log("AccJudgePerShareAfter100kBlocks", accJudgePerShareAfter100kBlocks);
 uint256 user1BalanceAfterFirstClaim = judgeToken.balanceOf(user1);
-logRewards(user1, user1BalanceAfterFirstClaim, user1BalanceAfterDeposit, "user1 first rewards");
+logRewards(user1BalanceAfterFirstClaim, user1BalanceAfterDeposit, "user1 first rewards");
 
 vm.prank(user2);
 judgeStaking.claimRewards(0);
 
 uint256 user2BalanceAfterFirstClaim = judgeToken.balanceOf(user2);
-logRewards(user2, user2BalanceAfterFirstClaim, user2BalanceAfterDeposit, "user2 first rewards");
+logRewards(user2BalanceAfterFirstClaim, user2BalanceAfterDeposit, "user2 first rewards");
 
 uint newMintAmount = 500_000 * 10 ** uint256(decimals);
 judgeToken.mint(owner, newMintAmount);
@@ -563,18 +563,18 @@ uint256 accBonusJudgePerShareAfterClaim = judgeStaking.accBonusJudgePerShare();
 console.log("AccBonusJudgePerShareAfterSecondClaim", accBonusJudgePerShareAfterClaim);
 
 uint256 user1BalanceAfterSecondClaim = judgeToken.balanceOf(user1);
-logRewards(user1, user1BalanceAfterSecondClaim, user1BalanceAfterFirstClaim, "user1 second rewards");
+logRewards(user1BalanceAfterSecondClaim, user1BalanceAfterFirstClaim, "user1 second rewards");
 
 vm.prank(user2);
 judgeStaking.claimRewards(0);
 
 uint256 user2BalanceAfterSecondClaim = judgeToken.balanceOf(user2);
-logRewards(user2, user2BalanceAfterSecondClaim, user2BalanceAfterFirstClaim, "user2 second rewards");
+logRewards(user2BalanceAfterSecondClaim, user2BalanceAfterFirstClaim, "user2 second rewards");
 
 vm.prank(user3);
 judgeStaking.claimRewards(0);
 uint256 user3BalanceAfterFirstClaim = judgeToken.balanceOf(user3);
-logRewards(user3, user3BalanceAfterFirstClaim, user3BalanceAfterDeposit, "user3 first rewards");
+logRewards(user3BalanceAfterFirstClaim, user3BalanceAfterDeposit, "user3 first rewards");
 }
 
 function testClaimRewardsInSecondQuarter()public{
@@ -653,17 +653,17 @@ vm.roll(poolStartBlock + 698_000);
 vm.prank(user1);
 judgeStaking.claimRewards(0);
 uint256 user1BalanceinSecondQuarter = judgeToken.balanceOf(user1);
-logRewards(user1, user1BalanceinSecondQuarter, user1BalanceBeforeEndOfFirstQuarter, "user1 second quarter rewards");
+logRewards(user1BalanceinSecondQuarter, user1BalanceBeforeEndOfFirstQuarter, "user1 second quarter rewards");
 
 vm.prank(user2);
 judgeStaking.claimRewards(0);
 uint256 user2BalanceinSecondQuarter = judgeToken.balanceOf(user2);
-logRewards(user2, user2BalanceinSecondQuarter, user2BalanceBeforeEndOfFirstQuarter, "user2 second quarter rewards");
+logRewards(user2BalanceinSecondQuarter, user2BalanceBeforeEndOfFirstQuarter, "user2 second quarter rewards");
 
 vm.prank(user3);
 judgeStaking.claimRewards(0);
 uint256 user3BalanceinSecondQuarter = judgeToken.balanceOf(user3);
-logRewards(user3, user3BalanceinSecondQuarter, user3BalanceBeforeEndOfFirstQuarter, "user3 second quarter rewards");
+logRewards(user3BalanceinSecondQuarter, user3BalanceBeforeEndOfFirstQuarter, "user3 second quarter rewards");
 }
 
 function testWithdraw()public{
@@ -1087,6 +1087,47 @@ function testRevertsInEmergancyWithdrawal()public{
 
 }
 
+function testCalculateTotalUnclaimedRewards()public{
+    uint256 reward = 1_000_000 * 10 ** uint256(decimals);
+    uint256 amount = 100_000 * 10 ** uint256(decimals);
+    uint256 bonus = 100_000 * 10 ** uint256(decimals);
+    uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
+    judgeToken.mint(user1, amount);
+    judgeToken.mint(user2, amount);
+
+    vm.prank(user1);
+    judgeToken.approve(address(judgeStaking), amount);
+
+    vm.roll(poolStartBlock);
+
+    judgeTreasury.setNewQuarterlyRewards(reward);
+    judgeTreasury.fundRewardsManager(1);
+
+    vm.prank(user1);
+    judgeStaking.deposit(40_000 * 10 ** uint256(decimals), 10);
+
+    vm.roll(poolStartBlock + 2000);
+    
+    judgeToken.approve(address(judgeTreasury), bonus);
+    judgeTreasury.addBonusToQuarterReward(bonus, 200_000);
+
+    vm.roll(poolStartBlock + 3000);
+    vm.prank(user1);
+    judgeStaking.deposit(40_000 * 10 ** uint256(decimals), 360);
+
+    vm.roll(poolStartBlock + 4000);
+    vm.startPrank(user2);
+    judgeToken.approve(address(judgeStaking), amount);
+    judgeStaking.deposit(60_000 * 10 ** uint256(decimals), 360);
+    vm.stopPrank();
+
+    vm.roll(poolStartBlock + 80_000);
+
+    uint256 accruedRewards = judgeStaking.rewardsPerBlock() * 80_000;
+    uint256 accruedBonus = judgeStaking.bonusPerBlock() * 78_000;
+    assertEq(judgeStaking.calculateTotalUnclaimedRewards(), accruedRewards + accruedBonus);
+}
+
 function testViewMyStakes()public{
 uint256 amount = 100_000 * 10 ** uint256(decimals);
 uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
@@ -1312,7 +1353,7 @@ assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).lockUpRatio, Math.mulDiv(lo
 assertEq(judgeStaking.viewUserStakeAtIndex(user1, 1).rewardDebt, Math.mulDiv(depositAmount2, accJudgePerShare2, 1e18));
 }
 
-function testViewMyEstimatedPendingRewards()public{
+function testViewMyPendingRewards()public{
     uint256 reward = 1_000_000 * 10 ** uint256(decimals);
     uint256 amount = 100_000 * 10 ** uint256(decimals);
     uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
@@ -1337,8 +1378,8 @@ function testViewMyEstimatedPendingRewards()public{
     judgeStaking.deposit(depositAmount2, lockUpPeriod2);
 
     vm.roll(poolStartBlock + 10000);
-    assertEq(judgeStaking.viewMyEstimatedPendingRewards(0), 5611672278338945 * 10 ** uint256(6));
-    assertEq(judgeStaking.viewMyEstimatedPendingRewards(1), 982042648709315375 * 10 ** uint256(4));
+    assertEq(judgeStaking.viewMyPendingRewards(0), 5611672278338945 * 10 ** uint256(6));
+    assertEq(judgeStaking.viewMyPendingRewards(1), 982042648709315375 * 10 ** uint256(4));
 }
 
 function testCalculateMisplacedJudge()public{

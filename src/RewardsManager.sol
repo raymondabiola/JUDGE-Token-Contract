@@ -22,14 +22,14 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     bytes32 public constant FUND_MANAGER_ROLE = keccak256("FUND_MANAGER_ROLE");
     bytes32 public constant REWARDS_MANAGER_PRECISE_BALANCE_UPDATER = keccak256("REWARDS_MANAGER_PRECISE_BALANCE_UPDATER"); //Assign Role to judgeTreasury at deployment
     
-    uint256 public totalRewardsPaid;
-    uint8 public feePercent;
+    uint256 public totalRewardsPaid; //Total rewards (base + bonus) claimed by users in the staking pool
+    uint8 public feePercent; //Fee charged to recover misplaced JudgeTokens sent to the contract
     uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30; 
-    uint256 public judgeRecoveryMinimumThreshold;
-    uint256 public rewardsManagerPreciseBalance;
-    uint256 public rewardsManagerBonusBalance;
+    uint256 public judgeRecoveryMinimumThreshold; //Feasible minimum amount of JudgeTokens that's worth recovering
+    uint256 public rewardsManagerPreciseBalance; //Exact total amount of judgeTokens in rewards Manager contract excluding misplaced judgeTokens
+    uint256 public rewardsManagerBonusBalance; //Bonus reward balance of this contract, incremented by recieving bonus from treasury and decrement by paying out bonus
 
-    mapping(address => uint256) public feeBalanceOfStrandedToken;
+    mapping(address => uint256) public feeBalanceOfStrandedToken; //mapping of accumulated fee of recovered misplaced tokens
 
     event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
     event JudgeTreasuryAdressUpdated(address indexed judgeTreasuryAddress);
@@ -121,13 +121,17 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     function adminWithdrawal(address _to, uint256 _amount) external validAddress(_to) validAmount(_amount) notSelf(_to) onlyRole(FUND_MANAGER_ROLE) nonReentrant{
         require(_amount <= rewardsManagerPreciseBalance, InsufficientBalance());
         judgeToken.safeTransfer(_to, _amount);
+        rewardsManagerPreciseBalance -= _amount;
 
         emit AdminWithdrawed(msg.sender, _to, _amount);
     }
 
+    //Sensitive function to pull out all balances from rewardsManager
     function emergencyWithdrawal(address _to) external validAddress(_to) notSelf(_to) onlyRole(FUND_MANAGER_ROLE) nonReentrant{
         require(judgeToken.balanceOf(address(this)) > 0, InsufficientContractBalance());
         judgeToken.safeTransfer(_to, judgeToken.balanceOf(address(this)) );
+        rewardsManagerPreciseBalance = 0;
+         rewardsManagerBonusBalance = 0;
 
         emit EmergencyWithdrawal(msg.sender, _to, judgeToken.balanceOf(address(this)));
     }
