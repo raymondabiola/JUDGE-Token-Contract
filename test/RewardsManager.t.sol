@@ -143,7 +143,7 @@ contract RewardsManagerTest is Test{
     uint256 amountHigherThanBalance = 1_250_001 * 10 ** uint256(decimals);
     uint256 invalidAmount;
     uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
-    uint256 index = 1;
+    uint32 index = 1;
     judgeTreasury.setNewQuarterlyRewards(rewards);
     judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
     judgeTreasury.fundRewardsManager(index);
@@ -177,7 +177,7 @@ contract RewardsManagerTest is Test{
 
     function testEmergencyWithdrawal()public{
     uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
-    uint256 index = 1;
+    uint32 index = 1;
     judgeTreasury.setNewQuarterlyRewards(rewards);
     bytes32 fundManagerAdminTreasury = judgeTreasury.FUND_MANAGER_ROLE();
     bytes32 fundManagerAdminRewardsManager = rewardsManager.FUND_MANAGER_ROLE();
@@ -210,7 +210,7 @@ contract RewardsManagerTest is Test{
     bytes32 fundManagerAdminTreasury = judgeTreasury.FUND_MANAGER_ROLE();
     bytes32 tokenRecoveryAdmin = rewardsManager.TOKEN_RECOVERY_ROLE();
     uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
-    uint256 index = 1;
+    uint32 index = 1;
     judgeTreasury.setNewQuarterlyRewards(rewards);
     uint256 misplacedAmount = 100_000 * 10 ** uint256(decimals);
     judgeToken.mint(user3, misplacedAmount);
@@ -246,7 +246,7 @@ contract RewardsManagerTest is Test{
     vm.prank(user3);
     judgeToken.transfer(address(rewardsManager), misplacedAmount);
     uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
-    uint256 index = 1;
+    uint32 index = 1;
     judgeTreasury.setNewQuarterlyRewards(rewards);
     judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
     judgeTreasury.fundRewardsManager(index);

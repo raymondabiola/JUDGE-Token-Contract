@@ -244,7 +244,7 @@ function testFundRewardsManager() public{
     uint256 stakingRewardsFundFromTreasury1 = 49_000_001 * 10 ** uint256(decimals);
     uint256 stakingRewardsFundFromTreasury2 = 40_000_000 * 10 ** uint256(decimals);
     bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
-    uint256 index = 1;
+    uint32 index = 1;
    
 judgeTreasury.setNewQuarterlyRewards(rewards);
 vm.expectRevert(abi.encodeWithSelector(
@@ -273,7 +273,7 @@ function testMintToTreasuryReserve() public{
  bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
  uint256 amount = 2_000_000 * 10 * 10 ** uint256(decimals);
  uint256 invalidAmount;
- uint assumedMintable = 1_000_000 * 10 * 10 ** uint256(decimals);
+ uint256 assumedMintable = 1_000_000 * 10 * 10 ** uint256(decimals);
 vm.expectRevert(abi.encodeWithSelector(
     AccessControlUnauthorizedAccount.selector,
     owner,

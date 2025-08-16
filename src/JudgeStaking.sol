@@ -155,8 +155,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit JudgeTreasuryAddressUpdated(_judgeTreasuryAddress);
     }
 
-    function updateEarlyWithdrawPenaltyPercentForMaxLockupPeriod(uint8 _earlyWithdrawPenaltyPercentForMaxLockupPeriod)
-        external validAmount(_earlyWithdrawPenaltyPercentForMaxLockupPeriod)
+    function updateEarlyWithdrawPenaltyPercentForMaxLockupPeriod(uint8 _earlyWithdrawPenaltyPercentForMaxLockupPeriod) external validAmount(_earlyWithdrawPenaltyPercentForMaxLockupPeriod)
         onlyRole(STAKING_ADMIN_ROLE)
     {
         require(_earlyWithdrawPenaltyPercentForMaxLockupPeriod <= maxPenaltyPercent, ValueTooHigh());
@@ -177,8 +176,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit JudgeRecoveryMinimumThresholdUpdated(oldJudgeRecoveryMinimumThreshold, newJudgeRecoveryMinimumThreshold);
     }
 
-    function getCurrentQuarterIndex()public view returns(uint256){
-        return (block.number - stakingPoolStartBlock) / 648_000 + 1;
+    function getCurrentQuarterIndex()public view returns(uint32){
+        return uint32((block.number - stakingPoolStartBlock) / 648_000 + 1);
     }
 
     function calculateBonusRewardsPerBlock(uint256 _bonus, uint256 _durationInBlocks)public returns(uint256){
@@ -188,7 +187,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     function calculateCurrentRewardsPerBlock()external onlyRole(REWARDS_PER_BLOCK_CALCULATOR) returns(uint256){
 
-       uint256 currentQuarterIndex = getCurrentQuarterIndex();
+       uint32 currentQuarterIndex = getCurrentQuarterIndex();
         uint256 totalRewards = judgeTreasury.quarterlyRewards(currentQuarterIndex);
         uint256 totalRewardsAccruedinCurrentQuarter = quarterAccruedRewardsForStakes[currentQuarterIndex];
         require (totalRewards >= totalRewardsAccruedinCurrentQuarter, OverPaidRewards());
@@ -226,7 +225,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function updatePool() public {
-        uint256 currentQuarterIndex = getCurrentQuarterIndex();
+        uint32 currentQuarterIndex = getCurrentQuarterIndex();
         uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex-1) * 648_000;
         if (block.number <= lastRewardBlock) {
             return;
@@ -302,7 +301,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function claimRewards(uint16 _index) external validIndex(_index) nonReentrant{
-        uint256 currentQuarterIndex = getCurrentQuarterIndex();
+        uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(stake.amountStaked > 0, ZeroStakeBalance());
 
@@ -326,7 +325,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function withdraw(uint256 _amount, uint16 _index) external validAmount(_amount) validIndex(_index) nonReentrant {
-        uint256 currentQuarterIndex = getCurrentQuarterIndex();
+        uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number >= stake.maturityBlockNumber, NotYetMatured());
         require(_amount <= stake.amountStaked, InsufficientBalance());
@@ -358,7 +357,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function withdrawAll(uint16 _index) external validIndex(_index) nonReentrant {
-        uint256 currentQuarterIndex = getCurrentQuarterIndex();
+        uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number >= stake.maturityBlockNumber, NotYetMatured());
         updatePool();
@@ -388,7 +387,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function earlyWithdraw(uint256 _amount, uint16 _index) external validAmount(_amount) validIndex(_index) nonReentrant{
-        uint256 currentQuarterIndex = getCurrentQuarterIndex();
+        uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number < stake.maturityBlockNumber, AlreadyMatured());
         require(_amount <= stake.amountStaked, InsufficientBalance());
@@ -435,12 +434,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit EarlyWithdrawalPenalized(msg.sender, block.number, penalty);
     }
 
-    /* Treat the emergencyWithdraw function with caution, It is an exit route and when called withdraws all user stakes 
+    /* NOTE: Treat the emergencyWithdraw function with caution, It is an exit route and when called withdraws all user stakes 
     to their wallets. Only use when there is a serious issue with the staking pool.*/
     function emergencyWithdraw() external onlyRole(STAKING_ADMIN_ROLE) nonReentrant{
         require(!emergencyFuncCalled, AlreadyTriggered());
         emergencyFuncCalled = true;
-        uint256 currentQuarterIndex = getCurrentQuarterIndex();
+        uint32 currentQuarterIndex = getCurrentQuarterIndex();
         updatePool();
         for (uint32 i; i < users.length; i++) {
             address userAddr = users[i];
@@ -472,7 +471,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function calculateTotalUnclaimedRewards()external view returns(uint256){
-    uint256 currentQuarterIndex = getCurrentQuarterIndex();
+    uint32 currentQuarterIndex = getCurrentQuarterIndex();
 
     uint256 tempQuarterAccruedRewards = quarterAccruedRewardsForStakes[currentQuarterIndex];
     uint256 tempQuarterAccruedBonusRewards = quarterAccruedBonusRewardsForStakes[currentQuarterIndex];
