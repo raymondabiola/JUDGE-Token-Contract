@@ -10,7 +10,7 @@ import {IERC165} from "../lib/openzeppelin-contracts/contracts/utils/introspecti
 
 contract JudgeTokenTest is Test {
     JudgeToken public judgeToken;
-    
+
     address public owner;
     address public zeroAddress;
     uint256 pKey = 0x450802246;
@@ -60,7 +60,6 @@ contract JudgeTokenTest is Test {
         assertEq(cap, judgeToken.cap());
         vm.expectRevert(AmountExceedsMintable.selector);
         judgeToken.mint(user1, mintAmount);
-
     }
 
     function testTotalSupply() public {

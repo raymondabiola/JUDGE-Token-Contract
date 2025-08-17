@@ -28,9 +28,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     uint256 public stakingPoolStartBlock;
     uint64 private newStakeId;
-    uint256 public accJudgePerShare;  //cummulated JUDGE base rewards that a single JUDGE token stake weight is expected to receive
-    uint256 public  accBonusJudgePerShare; //cummulated JUDGE bonus rewards that a single JUDGE token stake weight is expected to receive
-    uint256 public rewardsPerBlock; 
+    uint256 public accJudgePerShare; //cummulated JUDGE base rewards that a single JUDGE token stake weight is expected to receive
+    uint256 public accBonusJudgePerShare; //cummulated JUDGE bonus rewards that a single JUDGE token stake weight is expected to receive
+    uint256 public rewardsPerBlock;
     uint256 public bonusPerBlock;
     uint256 public lastRewardBlock;
     uint256 public totalStakeWeight; //The total calculated stake weights of all stakers based on the stake amount and chosen lockup period.
@@ -46,7 +46,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint8 public feePercent; //Fee charged to recover misplaced JudgeTokens sent to the contract
     uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30;
     uint256 public judgeRecoveryMinimumThreshold; //Feasible minimum amount of JudgeTokens that's worth recovering
-
 
     struct userStake {
         uint64 id;
@@ -85,7 +84,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     event ClaimedReward(address indexed user, uint256 rewards);
     event JudgeTokenRecovered(address indexed to, uint256 refund, uint256 fee);
     event Erc20Recovered(address indexed tokenAddress, address indexed to, uint256 refund, uint256 fee);
-     event FeesFromOtherTokensTransferred (address indexed tokenAddress, address indexed to, uint256 feeTransferred, uint256 feeBalanceOfStrandedToken);
+    event FeesFromOtherTokensTransferred(
+        address indexed tokenAddress, address indexed to, uint256 feeTransferred, uint256 feeBalanceOfStrandedToken
+    );
 
     error InvalidAmount();
     error InvalidAddress();
@@ -105,10 +106,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     error NotUpToThreshold();
     error OverPaidRewards();
 
-    constructor(
-        address _judgeTokenAddress,
-        uint8 _earlyWithdrawPenaltyPercentForMaxLockupPeriod
-    ) validAddress(_judgeTokenAddress) {
+    constructor(address _judgeTokenAddress, uint8 _earlyWithdrawPenaltyPercentForMaxLockupPeriod)
+        validAddress(_judgeTokenAddress)
+    {
         require(_judgeTokenAddress.code.length > 0, EOANotAllowed());
         require(earlyWithdrawPenaltyPercentForMaxLockupPeriod <= maxPenaltyPercent, ValueTooHigh());
         judgeToken = JudgeToken(_judgeTokenAddress);
@@ -120,42 +120,56 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit EarlyWithdrawPenaltyPercentForMaxLockupPeriodInitialized(_earlyWithdrawPenaltyPercentForMaxLockupPeriod);
     }
 
-    modifier validAmount(uint256 _amount){
-         require(_amount > 0, InvalidAmount());
-         _;
+    modifier validAmount(uint256 _amount) {
+        require(_amount > 0, InvalidAmount());
+        _;
     }
 
-    modifier validAddress(address addr){
-              require(addr != address(0), InvalidAddress());
-              _;
+    modifier validAddress(address addr) {
+        require(addr != address(0), InvalidAddress());
+        _;
     }
 
-    modifier validIndex(uint16 _index){
+    modifier validIndex(uint16 _index) {
         require(_index < userStakes[msg.sender].length, InvalidIndex());
         _;
     }
 
-    modifier notSelf(address _to){
+    modifier notSelf(address _to) {
         require(_to != address(this), CannotInputThisContractAddress());
         _;
     }
 
-        modifier notEOA(address _addr){
+    modifier notEOA(address _addr) {
         require(_addr.code.length > 0, EOANotAllowed());
         _;
     }
 
-    function setRewardsManagerAddress(address _rewardsManagerAddress) external onlyRole(STAKING_ADMIN_ROLE) validAddress(_rewardsManagerAddress) notSelf(_rewardsManagerAddress) notEOA(_rewardsManagerAddress) {
+    function setRewardsManagerAddress(address _rewardsManagerAddress)
+        external
+        onlyRole(STAKING_ADMIN_ROLE)
+        validAddress(_rewardsManagerAddress)
+        notSelf(_rewardsManagerAddress)
+        notEOA(_rewardsManagerAddress)
+    {
         rewardsManager = IRewardsManager(_rewardsManagerAddress);
         emit RewardsManagerAddressUpdated(_rewardsManagerAddress);
     }
 
-        function setJudgeTreasuryAddress(address _judgeTreasuryAddress) external onlyRole(STAKING_ADMIN_ROLE) validAddress(_judgeTreasuryAddress) notSelf(_judgeTreasuryAddress) notEOA(_judgeTreasuryAddress) {
+    function setJudgeTreasuryAddress(address _judgeTreasuryAddress)
+        external
+        onlyRole(STAKING_ADMIN_ROLE)
+        validAddress(_judgeTreasuryAddress)
+        notSelf(_judgeTreasuryAddress)
+        notEOA(_judgeTreasuryAddress)
+    {
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
         emit JudgeTreasuryAddressUpdated(_judgeTreasuryAddress);
     }
 
-    function updateEarlyWithdrawPenaltyPercentForMaxLockupPeriod(uint8 _earlyWithdrawPenaltyPercentForMaxLockupPeriod) external validAmount(_earlyWithdrawPenaltyPercentForMaxLockupPeriod)
+    function updateEarlyWithdrawPenaltyPercentForMaxLockupPeriod(uint8 _earlyWithdrawPenaltyPercentForMaxLockupPeriod)
+        external
+        validAmount(_earlyWithdrawPenaltyPercentForMaxLockupPeriod)
         onlyRole(STAKING_ADMIN_ROLE)
     {
         require(_earlyWithdrawPenaltyPercentForMaxLockupPeriod <= maxPenaltyPercent, ValueTooHigh());
@@ -163,70 +177,72 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit EarlyWithdrawPenaltyPercentForMaxLockupPeriodUpdated(_earlyWithdrawPenaltyPercentForMaxLockupPeriod);
     }
 
-         function updateFeePercent(uint8 _newFeePercent) external onlyRole(STAKING_ADMIN_ROLE){
+    function updateFeePercent(uint8 _newFeePercent) external onlyRole(STAKING_ADMIN_ROLE) {
         require(_newFeePercent < FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
         uint8 oldFeePercent = feePercent;
         feePercent = _newFeePercent;
         emit FeePercentUpdated(oldFeePercent, _newFeePercent);
     }
 
-    function updateJudgeRecoveryMinimumThreshold(uint256 newJudgeRecoveryMinimumThreshold) external onlyRole(STAKING_ADMIN_ROLE){
+    function updateJudgeRecoveryMinimumThreshold(uint256 newJudgeRecoveryMinimumThreshold)
+        external
+        onlyRole(STAKING_ADMIN_ROLE)
+    {
         uint256 oldJudgeRecoveryMinimumThreshold = judgeRecoveryMinimumThreshold;
         judgeRecoveryMinimumThreshold = newJudgeRecoveryMinimumThreshold;
         emit JudgeRecoveryMinimumThresholdUpdated(oldJudgeRecoveryMinimumThreshold, newJudgeRecoveryMinimumThreshold);
     }
 
-    function getCurrentQuarterIndex()public view returns(uint32){
+    function getCurrentQuarterIndex() public view returns (uint32) {
         return uint32((block.number - stakingPoolStartBlock) / 648_000 + 1);
     }
 
-    function calculateBonusRewardsPerBlock(uint256 _bonus, uint256 _durationInBlocks)public returns(uint256){
+    function calculateBonusRewardsPerBlock(uint256 _bonus, uint256 _durationInBlocks) public returns (uint256) {
         bonusPerBlock = _bonus / _durationInBlocks;
         return bonusPerBlock;
     }
 
-    function calculateCurrentRewardsPerBlock()external onlyRole(REWARDS_PER_BLOCK_CALCULATOR) returns(uint256){
-
-       uint32 currentQuarterIndex = getCurrentQuarterIndex();
+    function calculateCurrentRewardsPerBlock() external onlyRole(REWARDS_PER_BLOCK_CALCULATOR) returns (uint256) {
+        uint32 currentQuarterIndex = getCurrentQuarterIndex();
         uint256 totalRewards = judgeTreasury.quarterlyRewards(currentQuarterIndex);
         uint256 totalRewardsAccruedinCurrentQuarter = quarterAccruedRewardsForStakes[currentQuarterIndex];
-        require (totalRewards >= totalRewardsAccruedinCurrentQuarter, OverPaidRewards());
+        require(totalRewards >= totalRewardsAccruedinCurrentQuarter, OverPaidRewards());
         uint256 remainingRewards = totalRewards - totalRewardsAccruedinCurrentQuarter;
 
-        uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex-1) * 648_000;
+        uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex - 1) * 648_000;
         uint256 quarterEnd = quarterStart + 648_000;
 
-        if(lastRewardBlock > quarterEnd){
+        if (lastRewardBlock > quarterEnd) {
             return 0;
         }
 
-        if(remainingRewards == 0){
+        if (remainingRewards == 0) {
             return 0;
         }
 
         uint256 remainingBlocks = quarterEnd - lastRewardBlock;
-        if(remainingBlocks == 0){
+        if (remainingBlocks == 0) {
             return 0;
         }
-      rewardsPerBlock = remainingRewards / remainingBlocks;
-      return rewardsPerBlock;
+        rewardsPerBlock = remainingRewards / remainingBlocks;
+        return rewardsPerBlock;
     }
 
-    function getCurrentAPR() public view returns(uint256){
+    function getCurrentAPR() public view returns (uint256) {
         uint256 blocksPerYear = 2_628_000;
-        if(totalStakeWeight == 0){
+        if (totalStakeWeight == 0) {
             return 0;
         }
         // APR is scaled by 1e18, divide by same factor and multiply by 100 to get exact value
-        uint256 apr1 = Math.mulDiv(Math.mulDiv(rewardsPerBlock, blocksPerYear, 1), 1e18, totalStakeWeight);
-        uint256 apr2 = Math.mulDiv(Math.mulDiv(bonusPerBlock, blocksPerYear, 1), 1e18, totalStakeWeight);
+        uint256 apr1 = Math.mulDiv(Math.mulDiv(rewardsPerBlock, 2_628_000, 1), 1e18, totalStakeWeight);
+        uint256 apr2 = Math.mulDiv(Math.mulDiv(bonusPerBlock, 2_628_000, 1), 1e18, totalStakeWeight);
 
-        return apr1 + apr2 ;
+        return apr1 + apr2;
     }
 
     function updatePool() public {
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
-        uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex-1) * 648_000;
+        uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex - 1) * 648_000;
         if (block.number <= lastRewardBlock) {
             return;
         }
@@ -238,7 +254,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 blocksPassed = block.number - lastRewardBlock;
         uint256 totalReward = blocksPassed * rewardsPerBlock;
         accJudgePerShare += Math.mulDiv(totalReward, SCALE, totalStakeWeight);
-        uint256 bonusBlocksPassed = judgeTreasury.bonusEndBlock() > lastRewardBlock ? Math.min(blocksPassed, judgeTreasury.bonusEndBlock() - lastRewardBlock) : 0;
+        uint256 bonusBlocksPassed = judgeTreasury.bonusEndBlock() > lastRewardBlock
+            ? Math.min(blocksPassed, judgeTreasury.bonusEndBlock() - lastRewardBlock)
+            : 0;
         uint256 totalBonusReward = bonusBlocksPassed * bonusPerBlock;
         accBonusJudgePerShare += Math.mulDiv(totalBonusReward, SCALE, totalStakeWeight);
         lastRewardBlock = block.number;
@@ -248,7 +266,11 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         quarterAccruedBonusRewardsForStakes[currentQuarterIndex] += totalBonusReward;
     }
 
-    function deposit(uint256 _amount, uint32 _lockUpPeriodInDays) external validAmount(_amount) validAmount(_lockUpPeriodInDays) {
+    function deposit(uint256 _amount, uint32 _lockUpPeriodInDays)
+        external
+        validAmount(_amount)
+        validAmount(_lockUpPeriodInDays)
+    {
         require(_lockUpPeriodInDays <= maxLockUpPeriod, InvalidLockUpPeriod());
         if (!isUser[msg.sender]) {
             users.push(msg.sender);
@@ -265,7 +287,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 stakeWeight = Math.mulDiv(amountStaked, lockUpRatio, SCALE);
         totalStakeWeight += stakeWeight;
         totalStaked += _amount;
-        
+
         uint256 rewardDebt = Math.mulDiv(stakeWeight, accJudgePerShare, SCALE);
         uint256 bonusRewardDebt = Math.mulDiv(stakeWeight, accBonusJudgePerShare, SCALE);
 
@@ -288,19 +310,19 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit Deposited(msg.sender, _amount);
     }
 
-    function accumulatedStakeRewards(uint16 _index) internal view returns(uint256){
-         userStake storage stake = userStakes[msg.sender][_index];
+    function accumulatedStakeRewards(uint16 _index) internal view returns (uint256) {
+        userStake storage stake = userStakes[msg.sender][_index];
         uint256 accRewards = Math.mulDiv(stake.stakeWeight, accJudgePerShare, SCALE);
         return accRewards;
     }
 
-    function accumulatedStakeBonusRewards(uint16 _index) internal view returns(uint256){
-         userStake storage stake = userStakes[msg.sender][_index];
+    function accumulatedStakeBonusRewards(uint16 _index) internal view returns (uint256) {
+        userStake storage stake = userStakes[msg.sender][_index];
         uint256 accBonusRewards = Math.mulDiv(stake.stakeWeight, accBonusJudgePerShare, SCALE);
         return accBonusRewards;
     }
 
-    function claimRewards(uint16 _index) external validIndex(_index) nonReentrant{
+    function claimRewards(uint16 _index) external validIndex(_index) nonReentrant {
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(stake.amountStaked > 0, ZeroStakeBalance());
@@ -313,9 +335,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             rewardsManager.sendRewards(msg.sender, pending);
             quarterRewardsPaid[currentQuarterIndex] += pending;
             stake.rewardDebt = accumulatedStakeRewards(_index);
-           }
+        }
 
-        if(pendingBonus >0){
+        if (pendingBonus > 0) {
             rewardsManager.sendBonus(msg.sender, pendingBonus);
             quarterBonusRewardsPaid[currentQuarterIndex] += pendingBonus;
             stake.bonusRewardDebt = accumulatedStakeBonusRewards(_index);
@@ -334,12 +356,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 pending = accumulatedStakeRewards(_index) - stake.rewardDebt;
         uint256 pendingBonus = accumulatedStakeBonusRewards(_index) - stake.bonusRewardDebt;
 
-         if (pending > 0) {
+        if (pending > 0) {
             rewardsManager.sendRewards(msg.sender, pending);
             quarterRewardsPaid[currentQuarterIndex] += pending;
         }
 
-        if(pendingBonus >0){
+        if (pendingBonus > 0) {
             rewardsManager.sendBonus(msg.sender, pendingBonus);
             quarterBonusRewardsPaid[currentQuarterIndex] += pendingBonus;
         }
@@ -371,7 +393,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             quarterRewardsPaid[currentQuarterIndex] += pending;
         }
 
-        if(pendingBonus >0){
+        if (pendingBonus > 0) {
             rewardsManager.sendBonus(msg.sender, pendingBonus);
             quarterBonusRewardsPaid[currentQuarterIndex] += pendingBonus;
         }
@@ -386,7 +408,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit Withdrawn(msg.sender, amountWithdrawn, pending + pendingBonus);
     }
 
-    function earlyWithdraw(uint256 _amount, uint16 _index) external validAmount(_amount) validIndex(_index) nonReentrant{
+    function earlyWithdraw(uint256 _amount, uint16 _index)
+        external
+        validAmount(_amount)
+        validIndex(_index)
+        nonReentrant
+    {
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number < stake.maturityBlockNumber, AlreadyMatured());
@@ -397,10 +424,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 pendingBonus = accumulatedStakeBonusRewards(_index) - stake.bonusRewardDebt;
 
         totalStakeWeight -= stake.stakeWeight;
-        uint256 penalty = Math.mulDiv(_amount, Math.mulDiv(earlyWithdrawPenaltyPercentForMaxLockupPeriod, stake.lockUpRatio, SCALE), 100 );
+        uint256 penalty = Math.mulDiv(
+            _amount, Math.mulDiv(earlyWithdrawPenaltyPercentForMaxLockupPeriod, stake.lockUpRatio, SCALE), 100
+        );
         uint256 deduction = _amount + penalty;
         require(deduction <= stake.amountStaked, InsufficientBalance());
-        
+
         judgeToken.safeTransfer(address(judgeTreasury), penalty);
         totalPenalties += penalty;
         judgeTreasury.increaseTreasuryPreciseBalance(penalty);
@@ -410,7 +439,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             quarterRewardsPaid[currentQuarterIndex] += pending;
         }
 
-        if(pendingBonus >0){
+        if (pendingBonus > 0) {
             rewardsManager.sendBonus(msg.sender, pendingBonus);
             quarterBonusRewardsPaid[currentQuarterIndex] += pendingBonus;
         }
@@ -436,7 +465,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     /* NOTE: Treat the emergencyWithdraw function with caution, It is an exit route and when called withdraws all user stakes 
     to their wallets. Only use when there is a serious issue with the staking pool.*/
-    function emergencyWithdraw() external onlyRole(STAKING_ADMIN_ROLE) nonReentrant{
+    function emergencyWithdraw() external onlyRole(STAKING_ADMIN_ROLE) nonReentrant {
         require(!emergencyFuncCalled, AlreadyTriggered());
         emergencyFuncCalled = true;
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
@@ -448,7 +477,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
                 if (stake.amountStaked > 0) {
                     uint256 pending = Math.mulDiv(stake.stakeWeight, accJudgePerShare, SCALE) - stake.rewardDebt;
-                    uint256 pendingBonus = Math.mulDiv(stake.stakeWeight, accBonusJudgePerShare, SCALE) - stake.bonusRewardDebt;
+                    uint256 pendingBonus =
+                        Math.mulDiv(stake.stakeWeight, accBonusJudgePerShare, SCALE) - stake.bonusRewardDebt;
 
                     uint256 amount = stake.amountStaked;
 
@@ -470,24 +500,26 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
     }
 
-    function calculateTotalUnclaimedRewards()external view returns(uint256){
-    uint32 currentQuarterIndex = getCurrentQuarterIndex();
+    function calculateTotalUnclaimedRewards() external view returns (uint256) {
+        uint32 currentQuarterIndex = getCurrentQuarterIndex();
 
-    uint256 tempQuarterAccruedRewards = quarterAccruedRewardsForStakes[currentQuarterIndex];
-    uint256 tempQuarterAccruedBonusRewards = quarterAccruedBonusRewardsForStakes[currentQuarterIndex];
+        uint256 tempQuarterAccruedRewards = quarterAccruedRewardsForStakes[currentQuarterIndex];
+        uint256 tempQuarterAccruedBonusRewards = quarterAccruedBonusRewardsForStakes[currentQuarterIndex];
 
-    uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex-1) * 648_000;
-    uint256 blocksPassed = block.number - lastRewardBlock;
-    uint256 bonusBlocksPassed = judgeTreasury.bonusEndBlock() > lastRewardBlock ? Math.min(blocksPassed, judgeTreasury.bonusEndBlock() - lastRewardBlock) : 0;
-    uint256 totalBonusReward = bonusBlocksPassed * bonusPerBlock;
+        uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex - 1) * 648_000;
+        uint256 blocksPassed = block.number - lastRewardBlock;
+        uint256 bonusBlocksPassed = judgeTreasury.bonusEndBlock() > lastRewardBlock
+            ? Math.min(blocksPassed, judgeTreasury.bonusEndBlock() - lastRewardBlock)
+            : 0;
+        uint256 totalBonusReward = bonusBlocksPassed * bonusPerBlock;
 
-      uint256 blocksPassedSinceQuarterStart = block.number - quarterStart;
-         tempQuarterAccruedRewards = blocksPassedSinceQuarterStart * rewardsPerBlock;
+        uint256 blocksPassedSinceQuarterStart = block.number - quarterStart;
+        tempQuarterAccruedRewards = blocksPassedSinceQuarterStart * rewardsPerBlock;
         tempQuarterAccruedBonusRewards += totalBonusReward;
 
-     uint256 unClaimedBaseRewards = tempQuarterAccruedRewards - quarterRewardsPaid[currentQuarterIndex];
-     uint256 unClaimedBonusRewards = tempQuarterAccruedBonusRewards - quarterBonusRewardsPaid[currentQuarterIndex];
-    return unClaimedBaseRewards + unClaimedBonusRewards;
+        uint256 unClaimedBaseRewards = tempQuarterAccruedRewards - quarterRewardsPaid[currentQuarterIndex];
+        uint256 unClaimedBonusRewards = tempQuarterAccruedBonusRewards - quarterBonusRewardsPaid[currentQuarterIndex];
+        return unClaimedBaseRewards + unClaimedBonusRewards;
     }
 
     function viewMyStakes() external view returns (userStake[] memory) {
@@ -502,13 +534,20 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return users;
     }
 
-    function viewUserStakes(address addr) external view validAddress(addr) onlyRole(STAKING_ADMIN_ROLE) returns (userStake[] memory) {
+    function viewUserStakes(address addr)
+        external
+        view
+        validAddress(addr)
+        onlyRole(STAKING_ADMIN_ROLE)
+        returns (userStake[] memory)
+    {
         return userStakes[addr];
     }
 
     function viewUserStakeAtIndex(address addr, uint16 _index)
         external
-        view validAddress(addr)
+        view
+        validAddress(addr)
         onlyRole(STAKING_ADMIN_ROLE)
         returns (userStake memory)
     {
@@ -526,7 +565,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             uint256 totalReward = blocksPassed * rewardsPerBlock;
             tempAccJudgePerShare += Math.mulDiv(totalReward, SCALE, totalStakeWeight);
 
-            uint256 bonusBlocksPassed = judgeTreasury.bonusEndBlock() > lastRewardBlock ? Math.min(blocksPassed, judgeTreasury.bonusEndBlock() - lastRewardBlock) : 0;
+            uint256 bonusBlocksPassed = judgeTreasury.bonusEndBlock() > lastRewardBlock
+                ? Math.min(blocksPassed, judgeTreasury.bonusEndBlock() - lastRewardBlock)
+                : 0;
             uint256 totalBonusReward = bonusBlocksPassed * bonusPerBlock;
             tempAccBonusJudgePerShare += Math.mulDiv(totalBonusReward, SCALE, totalStakeWeight);
         }
@@ -543,11 +584,18 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return misplacedJudgeAmount;
     }
 
-    function recoverMisplacedJudgeToken(address _to, uint256 _amount)external validAddress(_to) validAmount(_amount) notSelf(_to)  onlyRole(TOKEN_RECOVERY_ROLE) nonReentrant{
+    function recoverMisplacedJudgeToken(address _to, uint256 _amount)
+        external
+        validAddress(_to)
+        validAmount(_amount)
+        notSelf(_to)
+        onlyRole(TOKEN_RECOVERY_ROLE)
+        nonReentrant
+    {
         uint256 misplacedJudgeAmount = calculateMisplacedJudge();
         require(_amount <= misplacedJudgeAmount, InvalidAmount());
         require(_amount >= judgeRecoveryMinimumThreshold, NotUpToThreshold());
-        uint256 refund = Math.mulDiv(_amount, (100-uint256(feePercent)), 100);
+        uint256 refund = Math.mulDiv(_amount, (100 - uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
         judgeToken.safeTransfer(address(judgeTreasury), fee);
         judgeTreasury.increaseTreasuryPreciseBalance(fee);
@@ -557,25 +605,36 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     function recoverErc20(address _strandedTokenAddr, address _addr, uint256 _amount)
         external
-        notSelf(_addr) validAmount(_amount) onlyRole(TOKEN_RECOVERY_ROLE) 
-    nonReentrant{
+        notSelf(_addr)
+        validAmount(_amount)
+        onlyRole(TOKEN_RECOVERY_ROLE)
+        nonReentrant
+    {
         require(_strandedTokenAddr != address(0) && _addr != address(0), InvalidAddress());
         require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
         require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), InsufficientContractBalance());
-        
-        uint256 refund = Math.mulDiv(_amount, (100-uint256(feePercent)), 100);
+
+        uint256 refund = Math.mulDiv(_amount, (100 - uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
         IERC20(_strandedTokenAddr).safeTransfer(_addr, refund);
-         feeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
+        feeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
         emit Erc20Recovered(_strandedTokenAddr, _addr, refund, fee);
     }
 
-    function transferFeesFromOtherTokensOutOfStaking(address _strandedTokenAddr, address _to, uint256 _amount)external notSelf(_to) validAmount(_amount) onlyRole(TOKEN_RECOVERY_ROLE) nonReentrant{
+    function transferFeesFromOtherTokensOutOfStaking(address _strandedTokenAddr, address _to, uint256 _amount)
+        external
+        notSelf(_to)
+        validAmount(_amount)
+        onlyRole(TOKEN_RECOVERY_ROLE)
+        nonReentrant
+    {
         require(_strandedTokenAddr != address(0) && _to != address(0), InvalidAddress());
         require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
         require(_amount <= feeBalanceOfStrandedToken[_strandedTokenAddr], InsufficientBalance());
         IERC20(_strandedTokenAddr).safeTransfer(_to, _amount);
         feeBalanceOfStrandedToken[_strandedTokenAddr] -= _amount;
-        emit FeesFromOtherTokensTransferred(_strandedTokenAddr, _to, _amount, feeBalanceOfStrandedToken[_strandedTokenAddr]);
+        emit FeesFromOtherTokensTransferred(
+            _strandedTokenAddr, _to, _amount, feeBalanceOfStrandedToken[_strandedTokenAddr]
+        );
     }
 }
