@@ -1407,6 +1407,7 @@ contract JudgeStakingTest is Test {
         judgeStaking.deposit(depositAmount2, lockUpPeriod2);
 
         vm.roll(poolStartBlock + 10000);
+        console.log("pending rewards", judgeStaking.viewMyPendingRewards(0));
         assertEq(judgeStaking.viewMyPendingRewards(0), 5611672278338945 * 10 ** uint256(6));
         assertEq(judgeStaking.viewMyPendingRewards(1), 982042648709315375 * 10 ** uint256(4));
     }

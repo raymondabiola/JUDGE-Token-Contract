@@ -229,7 +229,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function getCurrentAPR() public view returns (uint256) {
-        uint256 blocksPerYear = 2_628_000;
         if (totalStakeWeight == 0) {
             return 0;
         }
@@ -565,15 +564,27 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             uint256 totalReward = blocksPassed * rewardsPerBlock;
             tempAccJudgePerShare += Math.mulDiv(totalReward, SCALE, totalStakeWeight);
 
-            uint256 bonusBlocksPassed = judgeTreasury.bonusEndBlock() > lastRewardBlock
-                ? Math.min(blocksPassed, judgeTreasury.bonusEndBlock() - lastRewardBlock)
-                : 0;
+
+            uint256 bonusBlocksPassed = 0;
+            uint256 bonusEnd = judgeTreasury.bonusEndBlock();
+            if(bonusEnd > lastRewardBlock){
+                bonusBlocksPassed = Math.min(blocksPassed, bonusEnd - lastRewardBlock);
+            }
             uint256 totalBonusReward = bonusBlocksPassed * bonusPerBlock;
             tempAccBonusJudgePerShare += Math.mulDiv(totalBonusReward, SCALE, totalStakeWeight);
         }
 
-        uint256 pendingReward = Math.mulDiv(stake.stakeWeight, tempAccJudgePerShare, SCALE) - stake.rewardDebt;
-        uint256 pendingBonus = Math.mulDiv(stake.stakeWeight, tempAccBonusJudgePerShare, SCALE) - stake.rewardDebt;
+        uint256 pendingReward = 0;
+        uint256 calcReward = Math.mulDiv(stake.stakeWeight, tempAccJudgePerShare, SCALE);
+        if (calcReward > stake.rewardDebt){
+            pendingReward = calcReward - stake.rewardDebt;
+        }
+
+        uint256 pendingBonus = 0;
+        uint256 calcBonus = Math.mulDiv(stake.stakeWeight, tempAccBonusJudgePerShare, SCALE);
+        if(calcBonus > stake.bonusRewardDebt){
+            pendingBonus = calcBonus - stake.bonusRewardDebt;
+        }
 
         return pendingReward + pendingBonus;
     }
