@@ -589,9 +589,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return pendingReward + pendingBonus;
     }
 
-    function calculateMisplacedJudge() public view onlyRole(TOKEN_RECOVERY_ROLE) returns (uint256) {
+    function calculateMisplacedJudge() public view returns (uint256) {
         uint256 contractBalance = judgeToken.balanceOf(address(this));
-        uint256 misplacedJudgeAmount = contractBalance - totalStaked;
+        uint256 misplacedJudgeAmount = 0;
+        if(contractBalance > totalStaked){
+        misplacedJudgeAmount = contractBalance - totalStaked;
+        }
         return misplacedJudgeAmount;
     }
 
@@ -604,13 +607,19 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         nonReentrant
     {
         uint256 misplacedJudgeAmount = calculateMisplacedJudge();
+        require(misplacedJudgeAmount > 0, InvalidAmount());
         require(_amount <= misplacedJudgeAmount, InvalidAmount());
         require(_amount >= judgeRecoveryMinimumThreshold, NotUpToThreshold());
         uint256 refund = Math.mulDiv(_amount, (100 - uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
+
+        judgeToken.safeTransfer(_to, refund);
+
+        if(fee > 0){
         judgeToken.safeTransfer(address(judgeTreasury), fee);
         judgeTreasury.increaseTreasuryPreciseBalance(fee);
-        judgeToken.safeTransfer(_to, refund);
+        }
+
         emit JudgeTokenRecovered(_to, refund, fee);
     }
 
@@ -628,7 +637,10 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 refund = Math.mulDiv(_amount, (100 - uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
         IERC20(_strandedTokenAddr).safeTransfer(_addr, refund);
+
+        if(fee > 0){
         feeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
+        }
         emit Erc20Recovered(_strandedTokenAddr, _addr, refund, fee);
     }
 
