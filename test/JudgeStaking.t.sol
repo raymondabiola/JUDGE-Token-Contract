@@ -1420,7 +1420,6 @@ contract JudgeStakingTest is Test {
         uint32 lockUpPeriod2 = 360;
         judgeToken.mint(user1, amount);
         judgeToken.mint(user2, depositAmount2);
-        bytes32 tokenRecoveryAdmin = rewardsManager.TOKEN_RECOVERY_ROLE();
         uint256 misplacedAmount = 100_000 * 10 ** uint256(decimals);
         judgeToken.mint(user3, misplacedAmount);
 
@@ -1436,9 +1435,6 @@ contract JudgeStakingTest is Test {
         judgeToken.approve(address(judgeStaking), depositAmount2);
         judgeStaking.deposit(depositAmount2, lockUpPeriod2);
         vm.stopPrank();
-        vm.expectRevert(abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector, owner, tokenRecoveryAdmin));
-        judgeStaking.calculateMisplacedJudge();
-        judgeStaking.grantRole(tokenRecoveryAdmin, owner);
         assertEq(judgeStaking.calculateMisplacedJudge(), misplacedAmount);
     }
 

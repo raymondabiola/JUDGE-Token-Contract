@@ -506,15 +506,21 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 tempQuarterAccruedBonusRewards = quarterAccruedBonusRewardsForStakes[currentQuarterIndex];
 
         uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex - 1) * 648_000;
-        uint256 blocksPassed = block.number - lastRewardBlock;
-        uint256 bonusBlocksPassed = judgeTreasury.bonusEndBlock() > lastRewardBlock
-            ? Math.min(blocksPassed, judgeTreasury.bonusEndBlock() - lastRewardBlock)
-            : 0;
-        uint256 totalBonusReward = bonusBlocksPassed * bonusPerBlock;
+        uint256 blocksPassed = 0;
+        if(block.number > lastRewardBlock){
+        blocksPassed = block.number - lastRewardBlock;
+        }
+        uint256 bonusEnd = judgeTreasury.bonusEndBlock();
+        uint256 bonusBlocksPassed = 0;
+        if(bonusEnd > lastRewardBlock){
+        bonusBlocksPassed = Math.min(blocksPassed, bonusEnd - lastRewardBlock);
+        }
 
-        uint256 blocksPassedSinceQuarterStart = block.number - quarterStart;
-        tempQuarterAccruedRewards = blocksPassedSinceQuarterStart * rewardsPerBlock;
-        tempQuarterAccruedBonusRewards += totalBonusReward;
+        uint256 totalRewardSinceLastRewardBlock = blocksPassed * rewardsPerBlock;
+        uint256 totalBonusRewardSinceLastRewardBlock = bonusBlocksPassed * bonusPerBlock;
+
+        tempQuarterAccruedRewards += totalRewardSinceLastRewardBlock;
+        tempQuarterAccruedBonusRewards += totalBonusRewardSinceLastRewardBlock;
 
         uint256 unClaimedBaseRewards = tempQuarterAccruedRewards - quarterRewardsPaid[currentQuarterIndex];
         uint256 unClaimedBonusRewards = tempQuarterAccruedBonusRewards - quarterBonusRewardsPaid[currentQuarterIndex];

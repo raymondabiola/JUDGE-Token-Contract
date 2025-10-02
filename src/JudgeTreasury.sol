@@ -253,8 +253,12 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         emit TransferredFromTreasury(_addr, _amount);
     }
 
-    function calculateMisplacedJudge() public view onlyRole(TOKEN_RECOVERY_ROLE) returns (uint256) {
-        uint256 misplacedJudgeAmount = judgeToken.balanceOf(address(this)) - treasuryPreciseBalance;
+    function calculateMisplacedJudge() public view returns (uint256) {
+        uint256 contractBalance = judgeToken.balanceOf(address(this));
+        uint256 misplacedJudgeAmount = 0;
+        if (contractBalance > treasuryPreciseBalance){
+        misplacedJudgeAmount = judgeToken.balanceOf(address(this)) - treasuryPreciseBalance;
+        }
         return misplacedJudgeAmount;
     }
 
@@ -271,7 +275,9 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         require(_amount >= judgeRecoveryMinimumThreshold, NotUpToThreshold());
         uint256 refund = Math.mulDiv(_amount, (100 - uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
+        if(fee > 0){
         treasuryPreciseBalance += fee;
+        }
         judgeToken.safeTransfer(_to, refund);
         emit JudgeTokenRecovered(_to, refund, fee);
     }
@@ -289,7 +295,9 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
         uint256 refund = Math.mulDiv(_amount, (100 - uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
+        if(fee > 0){
         feeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
+        }
         IERC20(_strandedTokenAddr).safeTransfer(_addr, refund);
         emit Erc20Recovered(_strandedTokenAddr, _addr, refund, fee);
     }

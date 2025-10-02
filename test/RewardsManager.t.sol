@@ -188,7 +188,6 @@ contract RewardsManagerTest is Test {
 
     function testCalculateMisplacedJudge() public {
         bytes32 fundManagerAdminTreasury = judgeTreasury.FUND_MANAGER_ROLE();
-        bytes32 tokenRecoveryAdmin = rewardsManager.TOKEN_RECOVERY_ROLE();
         uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
         uint32 index = 1;
         judgeTreasury.setNewQuarterlyRewards(rewards);
@@ -198,10 +197,6 @@ contract RewardsManagerTest is Test {
         judgeToken.transfer(address(rewardsManager), misplacedAmount);
         judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
         judgeTreasury.fundRewardsManager(index);
-
-        vm.expectRevert(abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector, owner, tokenRecoveryAdmin));
-        rewardsManager.calculateMisplacedJudge();
-        rewardsManager.grantRole(tokenRecoveryAdmin, owner);
         assertEq(rewardsManager.calculateMisplacedJudge(), misplacedAmount);
     }
 

@@ -324,7 +324,6 @@ contract JudgeTreasuryTest is Test {
     }
 
     function testCalculateMisplacedJudge() public {
-        bytes32 tokenRecoveryAdmin = judgeTreasury.TOKEN_RECOVERY_ROLE();
         bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
         uint256 amount = 2_000_000 * 10 ** uint256(decimals);
         uint256 amountToTransfer = 500_000 * 10 ** uint256(decimals);
@@ -336,12 +335,7 @@ contract JudgeTreasuryTest is Test {
 
         vm.prank(user2);
         judgeToken.transfer(address(judgeTreasury), misplacedAmount);
-        judgeTreasury.grantRole(tokenRecoveryAdmin, owner);
         assertEq(judgeTreasury.calculateMisplacedJudge(), misplacedAmount);
-
-        vm.expectRevert(abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector, user2, tokenRecoveryAdmin));
-        vm.prank(user2);
-        judgeTreasury.calculateMisplacedJudge();
     }
 
     function testRecoverMisplacedJudge() public {
