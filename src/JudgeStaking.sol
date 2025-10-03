@@ -105,6 +105,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     error ValueHigherThanThreshold();
     error NotUpToThreshold();
     error OverPaidRewards();
+    error QuarterNotStarted();
 
     constructor(address _judgeTokenAddress, uint8 _earlyWithdrawPenaltyPercentForMaxLockupPeriod)
         validAddress(_judgeTokenAddress)
@@ -197,6 +198,10 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return uint32((block.number - stakingPoolStartBlock) / 648_000 + 1);
     }
 
+    function getQuarterIndexFromBlock(uint256 blockNumber) internal view returns(uint32){
+        return uint32((blockNumber - stakingPoolStartBlock) / 648_000 +1);
+    }
+
     function calculateBonusRewardsPerBlock(uint256 _bonus, uint256 _durationInBlocks) public returns (uint256) {
         bonusPerBlock = _bonus / _durationInBlocks;
         return bonusPerBlock;
@@ -242,6 +247,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     function updatePool() public {
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
         uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex - 1) * 648_000;
+        uint256 quarterEnd = quarterStart + 648_000;
         if (block.number <= lastRewardBlock) {
             return;
         }
@@ -250,18 +256,24 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             return;
         }
 
-        uint256 blocksPassed = block.number - lastRewardBlock;
+        uint256 blocksPassed = 0;
+        if(block.number > lastRewardBlock){
+        blocksPassed = Math.min(block.number - lastRewardBlock, quarterEnd - lastRewardBlock);
+        }
         uint256 totalReward = blocksPassed * rewardsPerBlock;
         accJudgePerShare += Math.mulDiv(totalReward, SCALE, totalStakeWeight);
-        uint256 bonusBlocksPassed = judgeTreasury.bonusEndBlock() > lastRewardBlock
-            ? Math.min(blocksPassed, judgeTreasury.bonusEndBlock() - lastRewardBlock)
-            : 0;
+
+        uint256 bonusBlocksPassed = 0;
+        uint256 bonusEnd = judgeTreasury.bonusEndBlock();
+        if(bonusEnd > lastRewardBlock){
+       bonusBlocksPassed = Math.min(blocksPassed, bonusEnd - lastRewardBlock);
+        }
         uint256 totalBonusReward = bonusBlocksPassed * bonusPerBlock;
         accBonusJudgePerShare += Math.mulDiv(totalBonusReward, SCALE, totalStakeWeight);
-        lastRewardBlock = block.number;
 
-        uint256 blocksPassedSinceQuarterStart = block.number - quarterStart;
-        quarterAccruedRewardsForStakes[currentQuarterIndex] = blocksPassedSinceQuarterStart * rewardsPerBlock;
+       lastRewardBlock = Math.min(block.number, quarterEnd);
+
+        quarterAccruedRewardsForStakes[currentQuarterIndex] += totalReward;
         quarterAccruedBonusRewardsForStakes[currentQuarterIndex] += totalBonusReward;
     }
 
@@ -499,13 +511,14 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
     }
 
-    function calculateTotalUnclaimedRewards() external view returns (uint256) {
+    function calculateQuarterUnclaimedRewards(uint256 index) external view returns (uint256) {
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
+        require(index <= currentQuarterIndex, QuarterNotStarted());
 
-        uint256 tempQuarterAccruedRewards = quarterAccruedRewardsForStakes[currentQuarterIndex];
-        uint256 tempQuarterAccruedBonusRewards = quarterAccruedBonusRewardsForStakes[currentQuarterIndex];
+        uint256 tempQuarterAccruedRewards = quarterAccruedRewardsForStakes[index];
+        uint256 tempQuarterAccruedBonusRewards = quarterAccruedBonusRewardsForStakes[index];
 
-        uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex - 1) * 648_000;
+        if(index == currentQuarterIndex){
         uint256 blocksPassed = 0;
         if(block.number > lastRewardBlock){
         blocksPassed = block.number - lastRewardBlock;
@@ -521,9 +534,10 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         tempQuarterAccruedRewards += totalRewardSinceLastRewardBlock;
         tempQuarterAccruedBonusRewards += totalBonusRewardSinceLastRewardBlock;
+        }
 
-        uint256 unClaimedBaseRewards = tempQuarterAccruedRewards - quarterRewardsPaid[currentQuarterIndex];
-        uint256 unClaimedBonusRewards = tempQuarterAccruedBonusRewards - quarterBonusRewardsPaid[currentQuarterIndex];
+        uint256 unClaimedBaseRewards = tempQuarterAccruedRewards - quarterRewardsPaid[index];
+        uint256 unClaimedBonusRewards = tempQuarterAccruedBonusRewards - quarterBonusRewardsPaid[index];
         return unClaimedBaseRewards + unClaimedBonusRewards;
     }
 

@@ -1164,7 +1164,7 @@ contract JudgeStakingTest is Test {
 
         uint256 accruedRewards = judgeStaking.rewardsPerBlock() * 80_000;
         uint256 accruedBonus = judgeStaking.bonusPerBlock() * 78_000;
-        assertEq(judgeStaking.calculateTotalUnclaimedRewards(), accruedRewards + accruedBonus);
+        assertEq(judgeStaking.calculateQuarterUnclaimedRewards(1), accruedRewards + accruedBonus);
     }
 
     function testViewMyStakes() public {
