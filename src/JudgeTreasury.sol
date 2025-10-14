@@ -33,9 +33,9 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     uint256 public immutable MAX_QUARTERLY_REWARD_ALLOCATION; //Upper bound of quarterly reward allocation
 
     uint8 public decimals;
-    uint32 quarterIndex;
-    uint256 public bonusEndBlock; //If there are bonus rewards, they can be sent for distribution while setting the number of blocks the bonus will run for
-
+    uint32 quarterIndex = 1;
+ //If there are bonus rewards, they can be sent for distribution while setting the number of blocks the bonus will run for
+    mapping (uint32 => uint256) public bonusEndBlock;
     mapping(uint32 => bool) public setQuarterlyRewardsAtIndexWasPaidToRewardsManager;
     mapping(uint32 => uint256) public quarterlyRewards; //mapping of base quarterly rewards;
     mapping(uint32 => uint256) public additionalQuarterRewards; //mapping of additional rewards
@@ -72,6 +72,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error NotUpToThreshold();
     error ValueHigherThanThreshold();
     error CurrentQuarterAllocationNotYetFunded();
+    error BaseRewardsNotSet();
     error QuarterAllocationAlreadyFunded();
 
     constructor(address _judgeTokenAddress, address _rewardsManagerAddress, address _judgeStakingAddress) {
@@ -170,20 +171,20 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     }
 
     function addBonusToQuarterReward(uint256 _bonus, uint256 _durationInBlocks) external {
-        require(block.number > bonusEndBlock, lastBonusStillRunning());
-        require(_bonus != 0, InvalidAmount());
         uint32 currentQuarterIndex = judgeStaking.getCurrentQuarterIndex();
         require(
             setQuarterlyRewardsAtIndexWasPaidToRewardsManager[currentQuarterIndex],
             CurrentQuarterAllocationNotYetFunded()
         );
+        require(block.number > bonusEndBlock[quarterIndex-1], lastBonusStillRunning());
+        require(_bonus != 0, InvalidAmount());
 
         additionalQuarterRewards[currentQuarterIndex] += _bonus;
         judgeToken.safeTransferFrom(msg.sender, address(rewardsManager), _bonus);
         rewardsManager.increaseRewardsManagerBonusBalance(_bonus);
         judgeStaking.updatePool();
         judgeStaking.calculateBonusRewardsPerBlock(_bonus, _durationInBlocks);
-        bonusEndBlock = block.number + _durationInBlocks;
+        bonusEndBlock[quarterIndex-1] = block.number + _durationInBlocks;
     }
 
     // Assign the treasury precise balance updater role to JudgeStaking contract and Rewards Manager Contract
