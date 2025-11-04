@@ -170,20 +170,19 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         quarterIndex += 1;
     }
 
-    function addBonusToQuarterReward(uint256 _bonus, uint256 _durationInBlocks) external {
+    function addBonusToQuarterReward(uint256 _bonus, uint256 _durationInBlocks) external validAmount(_bonus) validAmount(_durationInBlocks) {
         uint32 currentQuarterIndex = judgeStaking.getCurrentQuarterIndex();
         require(
             setQuarterlyRewardsAtIndexWasPaidToRewardsManager[currentQuarterIndex],
             CurrentQuarterAllocationNotYetFunded()
         );
         require(block.number > bonusEndBlock[quarterIndex-1], lastBonusStillRunning());
-        require(_bonus != 0, InvalidAmount());
 
         additionalQuarterRewards[currentQuarterIndex] += _bonus;
         judgeToken.safeTransferFrom(msg.sender, address(rewardsManager), _bonus);
         rewardsManager.increaseRewardsManagerBonusBalance(_bonus);
         judgeStaking.updatePool();
-        judgeStaking.calculateBonusRewardsPerBlock(_bonus, _durationInBlocks);
+        judgeStaking.calculateBonusRewardsPerBlock(currentQuarterIndex, _bonus, _durationInBlocks);
         bonusEndBlock[quarterIndex-1] = block.number + _durationInBlocks;
     }
 
@@ -211,7 +210,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
         judgeStaking.updatePool();
 
-        judgeStaking.calculateCurrentRewardsPerBlock();
+        judgeStaking.syncQuarterRewardsPerBlock(_index);
 
         emit RewardsManagerFunded(rewardAmount);
     }

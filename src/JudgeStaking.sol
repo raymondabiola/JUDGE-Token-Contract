@@ -210,44 +210,29 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return uint32((blockNumber - stakingPoolStartBlock) / 648_000 +1);
     }
 
-    function calculateBonusRewardsPerBlock(uint256 _bonus, uint256 _durationInBlocks) public returns (uint256) {
-        bonusPerBlock = _bonus / _durationInBlocks;
-        return bonusPerBlock;
+    function syncQuarterBonusRewardsPerBlock(uint32 quarterIndex, uint256 _bonus, uint256 _durationInBlocks) external onlyRole(REWARDS_PER_BLOCK_CALCULATOR){
+        bonusPerBlockForQuarter[quarterIndex] = _bonus / _durationInBlocks;
     }
 
-    function calculateCurrentRewardsPerBlock() external onlyRole(REWARDS_PER_BLOCK_CALCULATOR) returns (uint256) {
-        uint32 currentQuarterIndex = getCurrentQuarterIndex();
-        uint256 totalRewards = judgeTreasury.quarterlyRewards(currentQuarterIndex);
-        uint256 totalRewardsAccruedinCurrentQuarter = quarterAccruedRewardsForStakes[currentQuarterIndex];
-        require(totalRewards >= totalRewardsAccruedinCurrentQuarter, OverPaidRewards());
-        uint256 remainingRewards = totalRewards - totalRewardsAccruedinCurrentQuarter;
+    function syncQuarterRewardsPerBlock(uint32 quarterIndex) external onlyRole(REWARDS_PER_BLOCK_CALCULATOR) {
+        uint256 totalQuarterRewards = judgeTreasury.quarterlyRewards(quarterIndex);
+        uint256 rpb = 0;
 
-        uint256 quarterStart = stakingPoolStartBlock + (currentQuarterIndex - 1) * 648_000;
-        uint256 quarterEnd = quarterStart + 648_000;
-
-        if (lastRewardBlock > quarterEnd) {
-            return 0;
+        if(totalQuarterRewards > 0){
+            rpb = totalQuarterRewards / QUARTER_BLOCKS;
         }
 
-        if (remainingRewards == 0) {
-            return 0;
-        }
-
-        uint256 remainingBlocks = quarterEnd - lastRewardBlock;
-        if (remainingBlocks == 0) {
-            return 0;
-        }
-        rewardsPerBlock = remainingRewards / remainingBlocks;
-        return rewardsPerBlock;
+        rewardsPerBlockForQuarter[quarterIndex] = rpb;
     }
 
     function getCurrentAPR() public view returns (uint256) {
+        uint32 currentQuarterIndex = getCurrentQuarterIndex();
         if (totalStakeWeight == 0) {
             return 0;
         }
         // APR is scaled by 1e18, divide by same factor and multiply by 100 to get exact value
-        uint256 apr1 = Math.mulDiv(Math.mulDiv(rewardsPerBlock, 2_628_000, 1), 1e18, totalStakeWeight);
-        uint256 apr2 = Math.mulDiv(Math.mulDiv(bonusPerBlock, 2_628_000, 1), 1e18, totalStakeWeight);
+        uint256 apr1 = Math.mulDiv(Math.mulDiv(rewardsPerBlockForQuarter[currentQuarterIndex], 2_628_000, 1), 1e18, totalStakeWeight);
+        uint256 apr2 = Math.mulDiv(Math.mulDiv(bonusPerBlockForQuarter[currentQuarterIndex], 2_628_000, 1), 1e18, totalStakeWeight);
 
         return apr1 + apr2;
     }
@@ -581,8 +566,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         bonusBlocksPassed = Math.min(blocksPassed, bonusEnd - lastRewardBlock);
         }
 
-        uint256 totalRewardSinceLastRewardBlock = blocksPassed * rewardsPerBlock;
-        uint256 totalBonusRewardSinceLastRewardBlock = bonusBlocksPassed * bonusPerBlock;
+        uint256 totalRewardSinceLastRewardBlock = blocksPassed * rewardsPerBlockForQuarter[currentQuarterIndex];
+        uint256 totalBonusRewardSinceLastRewardBlock = bonusBlocksPassed * bonusPerBlockForQuarter[currentQuarterIndex];
 
         tempQuarterAccruedRewards += totalRewardSinceLastRewardBlock;
         tempQuarterAccruedBonusRewards += totalBonusRewardSinceLastRewardBlock;
