@@ -291,8 +291,33 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         lastRewardBlock = quarterEnd;
         startQuarter++;
-
         }
+
+        uint256 currentQuarterStart = stakingPoolStartBlock + (uint256(currentQuarterIndex)- 1) * QUARTER_BLOCKS;
+        uint256 currentQuarterEnd = currentQuarterStart + QUARTER_BLOCKS;
+
+        uint256 blocksPassed = 0;
+        blocksPassed = Math.min(block.number - lastRewardBlock, currentQuarterEnd - lastRewardBlock);
+
+        uint256 rpbNow = rewardsPerBlockForQuarter[currentQuarterIndex];
+        uint256 bpbNow = bonusPerBlockForQuarter[currentQuarterIndex];
+
+        uint256 totalRewardNow = blocksPassed * rpbNow;
+        accJudgePerShare = Math.mulDiv(totalRewardNow, SCALE, totalStakeWeight);
+
+        uint256 bonusEndBlockNow = judgeTreasury.bonusEndBlock(currentQuarterIndex);
+        uint256 bonusBlocksPassed = 0;
+        if(bonusEndBlockNow > lastRewardBlock){
+            bonusBlocksPassed = Math.min(bonusEndBlockNow - lastRewardBlock, blocksPassed);
+        }
+
+        uint256 totalBonusRewardNow = bonusBlocksPassed * bpbNow;
+        accBonusJudgePerShare += Math.mulDiv(totalBonusRewardNow, SCALE, totalStakeWeight);
+
+        quarterAccruedRewardsForStakes[currentQuarterIndex] += totalRewardNow;
+        quarterAccruedBonusRewardsForStakes[currentQuarterIndex] += totalBonusRewardNow;
+
+        lastRewardBlock = block.number;
     }
 
     function deposit(uint256 _amount, uint32 _lockUpPeriodInDays)
@@ -388,11 +413,13 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         if (pending > 0) {
             rewardsManager.sendRewards(msg.sender, pending);
             quarterRewardsPaid[currentQuarterIndex] += pending;
+            // Check if it's legit that rewards paid doesnt come from misssed quarters and get added to quarter rewards paid
         }
 
         if (pendingBonus > 0) {
             rewardsManager.sendBonus(msg.sender, pendingBonus);
             quarterBonusRewardsPaid[currentQuarterIndex] += pendingBonus;
+            // Same here
         }
 
         judgeToken.safeTransfer(msg.sender, _amount);
@@ -420,11 +447,14 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         if (pending > 0) {
             rewardsManager.sendRewards(msg.sender, pending);
             quarterRewardsPaid[currentQuarterIndex] += pending;
+
+            // Same here
         }
 
         if (pendingBonus > 0) {
             rewardsManager.sendBonus(msg.sender, pendingBonus);
             quarterBonusRewardsPaid[currentQuarterIndex] += pendingBonus;
+            // Same here
         }
         judgeToken.safeTransfer(msg.sender, amountWithdrawn);
 
@@ -466,11 +496,15 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         if (pending > 0) {
             rewardsManager.sendRewards(msg.sender, pending);
             quarterRewardsPaid[currentQuarterIndex] += pending;
+
+            // Same here
         }
 
         if (pendingBonus > 0) {
             rewardsManager.sendBonus(msg.sender, pendingBonus);
             quarterBonusRewardsPaid[currentQuarterIndex] += pendingBonus;
+
+            // Same here
         }
 
         judgeToken.safeTransfer(msg.sender, _amount);
@@ -604,7 +638,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
 
             uint256 bonusBlocksPassed = 0;
-            uint256 bonusEnd = judgeTreasury.bonusEndBlock();
+            uint256 bonusEnd = judgeTreasury.bonusEndBlock(); /*logic has to change for function and bonusendBlock is now a mapping in treasury*/
             if(bonusEnd > lastRewardBlock){
                 bonusBlocksPassed = Math.min(blocksPassed, bonusEnd - lastRewardBlock);
             }
