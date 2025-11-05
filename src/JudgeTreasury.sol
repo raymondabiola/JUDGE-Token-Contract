@@ -182,7 +182,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         judgeToken.safeTransferFrom(msg.sender, address(rewardsManager), _bonus);
         rewardsManager.increaseRewardsManagerBonusBalance(_bonus);
         judgeStaking.updatePool();
-        judgeStaking.calculateBonusRewardsPerBlock(currentQuarterIndex, _bonus, _durationInBlocks);
+        judgeStaking.syncQuarterBonusRewardsPerBlock(currentQuarterIndex, _bonus, _durationInBlocks);
         bonusEndBlock[quarterIndex-1] = block.number + _durationInBlocks;
     }
 

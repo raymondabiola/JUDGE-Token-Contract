@@ -31,8 +31,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint64 private newStakeId;
     uint256 public accJudgePerShare; //cummulated JUDGE base rewards that a single JUDGE token stake weight is expected to receive
     uint256 public accBonusJudgePerShare; //cummulated JUDGE bonus rewards that a single JUDGE token stake weight is expected to receive
-    uint256 public rewardsPerBlock;
-    uint256 public bonusPerBlock;
     uint256 public lastRewardBlock;
     uint256 public totalStakeWeight; //The total calculated stake weights of all stakers based on the stake amount and chosen lockup period.
     uint256 public totalStaked;
@@ -240,70 +238,47 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     function updatePool() public {
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
         
-        if (block.number <= lastRewardBlock) {
-            return;
-        }
+        if (block.number <= lastRewardBlock) return;
         if (totalStakeWeight == 0) {
             lastRewardBlock = block.number;
             return;
         }
 
         uint32 startQuarter = getQuarterIndexFromBlock(lastRewardBlock);
-        uint256 startQuarterBonusEnd = judgeTreasury.bonusEndBlock(startQuarter);
 
-        while(startQuarter < currentQuarterIndex){
+        while(startQuarter <= currentQuarterIndex){
         uint256 quarterStart = stakingPoolStartBlock + (uint256(startQuarter) - 1) * 648_000;
         uint256 quarterEnd = quarterStart + 648_000;
+        uint256 startQuarterBonusEnd = judgeTreasury.bonusEndBlock(startQuarter);
 
         uint256 rpb = rewardsPerBlockForQuarter[startQuarter];
         uint256 bpb = bonusPerBlockForQuarter[startQuarter];
 
-        uint256 blocksToFinish = quarterEnd - lastRewardBlock;
+        uint256 endBlock = (startQuarter == currentQuarterIndex) ? block.number : quarterEnd;
 
-        uint256 reward = blocksToFinish * rpb;
+        uint256 reward = 0;
+        uint256 bonusReward = 0;
+        if(endBlock > lastRewardBlock){
+           uint256 blocksPassed = endBlock - lastRewardBlock;
+            reward = blocksPassed * rpb;
         accJudgePerShare += Math.mulDiv(reward, SCALE, totalStakeWeight);
 
         uint256 bonusBlocks = 0;
         if(startQuarterBonusEnd > lastRewardBlock){
-            bonusBlocks = Math.min(blocksToFinish, startQuarterBonusEnd - lastRewardBlock);
+            bonusBlocks = Math.min(blocksPassed, startQuarterBonusEnd - lastRewardBlock);
+            bonusReward = bonusBlocks * bpb;
         }
-
-        uint256 bonusReward = bonusBlocks * bpb;
-        accBonusJudgePerShare += Math.mulDiv(bonusReward, SCALE, totalStakeWeight);
+         accBonusJudgePerShare += Math.mulDiv(bonusReward, SCALE, totalStakeWeight);
+        }
 
         quarterAccruedRewardsForStakes[startQuarter] += reward;
         quarterAccruedBonusRewardsForStakes[startQuarter] += bonusReward;
 
-        lastRewardBlock = quarterEnd;
-        startQuarter++;
+        lastRewardBlock = endBlock;
+        unchecked{startQuarter++;}
         }
-
-        uint256 currentQuarterStart = stakingPoolStartBlock + (uint256(currentQuarterIndex)- 1) * QUARTER_BLOCKS;
-        uint256 currentQuarterEnd = currentQuarterStart + QUARTER_BLOCKS;
-
-        uint256 blocksPassed = 0;
-        blocksPassed = Math.min(block.number - lastRewardBlock, currentQuarterEnd - lastRewardBlock);
-
-        uint256 rpbNow = rewardsPerBlockForQuarter[currentQuarterIndex];
-        uint256 bpbNow = bonusPerBlockForQuarter[currentQuarterIndex];
-
-        uint256 totalRewardNow = blocksPassed * rpbNow;
-        accJudgePerShare = Math.mulDiv(totalRewardNow, SCALE, totalStakeWeight);
-
-        uint256 bonusEndBlockNow = judgeTreasury.bonusEndBlock(currentQuarterIndex);
-        uint256 bonusBlocksPassed = 0;
-        if(bonusEndBlockNow > lastRewardBlock){
-            bonusBlocksPassed = Math.min(bonusEndBlockNow - lastRewardBlock, blocksPassed);
-        }
-
-        uint256 totalBonusRewardNow = bonusBlocksPassed * bpbNow;
-        accBonusJudgePerShare += Math.mulDiv(totalBonusRewardNow, SCALE, totalStakeWeight);
-
-        quarterAccruedRewardsForStakes[currentQuarterIndex] += totalRewardNow;
-        quarterAccruedBonusRewardsForStakes[currentQuarterIndex] += totalBonusRewardNow;
-
-        lastRewardBlock = block.number;
     }
+
 
     function deposit(uint256 _amount, uint32 _lockUpPeriodInDays)
         external
@@ -617,18 +592,37 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 tempAccBonusJudgePerShare = accBonusJudgePerShare;
 
         if (block.number > lastRewardBlock && totalStakeWeight > 0) {
-            uint256 blocksPassed = block.number - lastRewardBlock;
-            uint256 totalReward = blocksPassed * rewardsPerBlock;
-            tempAccJudgePerShare += Math.mulDiv(totalReward, SCALE, totalStakeWeight);
+            uint32 startQuarter = getQuarterIndexFromBlock(lastRewardBlock);
+            uint32 currentQuarter = getCurrentQuarterIndex();
+            uint256 tempLastRewardBlock = lastRewardBlock;
 
+            while(startQuarter <= currentQuarter) {
+                uint256 quarterStart = stakingPoolStartBlock + (uint256(startQuarter) - 1) * QUARTER_BLOCKS;
+                uint256 quarterEnd = quarterStart + QUARTER_BLOCKS;
 
-            uint256 bonusBlocksPassed = 0;
-            uint256 bonusEnd = judgeTreasury.bonusEndBlock(); /*logic has to change for function and bonusendBlock is now a mapping in treasury*/
-            if(bonusEnd > lastRewardBlock){
-                bonusBlocksPassed = Math.min(blocksPassed, bonusEnd - lastRewardBlock);
+                uint256 rpb = rewardsPerBlockForQuarter[startQuarter];
+                uint bpb = bonusPerBlockForQuarter[startQuarter]; 
+
+                uint256 endBlock = (startQuarter == currentQuarter) ? block.number : quarterEnd;
+                uint256 reward = 0;
+                uint256 bonusReward = 0;
+                if(endBlock > tempLastRewardBlock){
+                    uint256 blocksPassed = endBlock - tempLastRewardBlock;
+                    reward = blocksPassed * rpb;
+                    tempAccJudgePerShare += Math.mulDiv(reward, SCALE, totalStakeWeight);
+
+                    uint256 bonusEnd = judgeTreasury.bonusEndBlock(startQuarter);
+                    uint256 bonusBlocks = 0;
+                    if(bonusEnd > tempLastRewardBlock){
+                        bonusBlocks = Math.min(blocksPassed, bonusEnd - tempLastRewardBlock);
+                    }
+
+                    bonusReward = bonusBlocks * bpb;
+                    tempAccBonusJudgePerShare += Math.mulDiv(bonusReward, SCALE, totalStakeWeight);
+                    tempLastRewardBlock = endBlock;
+                }
+                unchecked{startQuarter ++;}
             }
-            uint256 totalBonusReward = bonusBlocksPassed * bonusPerBlock;
-            tempAccBonusJudgePerShare += Math.mulDiv(totalBonusReward, SCALE, totalStakeWeight);
         }
 
         uint256 pendingReward = 0;
@@ -642,7 +636,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         if(calcBonus > stake.bonusRewardDebt){
             pendingBonus = calcBonus - stake.bonusRewardDebt;
         }
-
         return pendingReward + pendingBonus;
     }
 
