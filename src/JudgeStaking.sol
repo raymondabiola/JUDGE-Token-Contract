@@ -28,6 +28,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     uint256 public stakingPoolStartBlock;
     uint256 public constant QUARTER_BLOCKS = 648_000;
+    uint32 public constant MAX_UPDATE_QUARTERS = 4;
     uint64 private newStakeId;
     uint256 public accJudgePerShare; //cummulated JUDGE base rewards that a single JUDGE token stake weight is expected to receive
     uint256 public accBonusJudgePerShare; //cummulated JUDGE bonus rewards that a single JUDGE token stake weight is expected to receive
@@ -181,7 +182,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function updateFeePercent(uint8 _newFeePercent) external onlyRole(STAKING_ADMIN_ROLE) {
-        require(_newFeePercent < FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
+        require(_newFeePercent <= FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
         uint8 oldFeePercent = feePercent;
         feePercent = _newFeePercent;
         emit FeePercentUpdated(oldFeePercent, _newFeePercent);
@@ -201,10 +202,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function getQuarterIndexFromBlock(uint256 blockNumber) internal view returns(uint32){
-        if(blockNumber <= stakingPoolStartBlock + 647_999){
-            return 1;
-        }
-        return uint32((blockNumber - stakingPoolStartBlock) / 648_000 +1);
+        return uint32(blockNumber > stakingPoolStartBlock > ((blockNumber - stakingPoolStartBlock) / QUARTER_BLOCKS) +1 : 1);
     }
 
     function syncQuarterBonusRewardsPerBlock(uint32 quarterIndex, uint256 _bonus, uint256 _durationInBlocks) external onlyRole(REWARDS_PER_BLOCK_CALCULATOR){
@@ -244,8 +242,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
 
         uint32 startQuarter = getQuarterIndexFromBlock(lastRewardBlock);
-
-        while(startQuarter <= currentQuarterIndex){
+        uint32 processed = 0;
+        while(startQuarter <= currentQuarterIndex && processed < MAX_UPDATE_QUARTERS){
         uint256 quarterStart = stakingPoolStartBlock + (uint256(startQuarter) - 1) * 648_000;
         uint256 quarterEnd = quarterStart + 648_000;
         uint256 startQuarterBonusEnd = judgeTreasury.bonusEndBlock(startQuarter);
@@ -274,7 +272,10 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         quarterAccruedBonusRewardsForStakes[startQuarter] += bonusReward;
 
         lastRewardBlock = endBlock;
-        unchecked{startQuarter++;}
+        unchecked{
+        startQuarter++;
+        processed++;
+        }
         }
     }
 
@@ -384,10 +385,10 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         judgeToken.safeTransfer(msg.sender, _amount);
 
-        totalStakeWeight -= stake.stakeWeight;
+        uint256 oldStakeWeight = stake.stakeWeight;
         stake.amountStaked -= _amount;
         stake.stakeWeight = Math.mulDiv(stake.amountStaked, stake.lockUpRatio, SCALE);
-        totalStakeWeight += stake.stakeWeight;
+        totalStakeWeight =totalStakeWeight - oldStakeWeight + stake.stakeWeight;
         stake.rewardDebt = accumulatedStakeRewards(_index);
         stake.bonusRewardDebt = accumulatedStakeBonusRewards(_index);
         totalStaked -= _amount;
@@ -442,7 +443,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 pending = accumulatedStakeRewards(_index) - stake.rewardDebt;
         uint256 pendingBonus = accumulatedStakeBonusRewards(_index) - stake.bonusRewardDebt;
 
-        totalStakeWeight -= stake.stakeWeight;
+        uint256 oldStakeWeight = stake.stakeWeight;
         uint256 penalty = Math.mulDiv(
             _amount, Math.mulDiv(earlyWithdrawPenaltyPercentForMaxLockupPeriod, stake.lockUpRatio, SCALE), 100
         );
@@ -477,7 +478,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         } else {
             stake.amountStaked -= deduction;
             stake.stakeWeight = Math.mulDiv(stake.amountStaked, stake.lockUpRatio, SCALE);
-            totalStakeWeight += stake.stakeWeight;
+            totalStakeWeight = totalStakeWeight - oldStakeWeight + stake.stakeWeight;
             stake.rewardDebt = accumulatedStakeRewards(_index);
             stake.bonusRewardDebt = accumulatedStakeBonusRewards(_index);
         }

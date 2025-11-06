@@ -60,6 +60,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error InvalidAmount();
     error InsufficientBalance();
     error InvalidAddress();
+    error BonusTooSmall();
     error JudgeTokenRecoveryNotAllowed();
     error CannotInputThisContractAddress();
     error InsufficientContractBalance();
@@ -176,6 +177,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
             setQuarterlyRewardsAtIndexWasPaidToRewardsManager[currentQuarterIndex],
             CurrentQuarterAllocationNotYetFunded()
         );
+        require(_bonus >= _durationInBlocks, BonusTooSmall());
         require(block.number > bonusEndBlock[quarterIndex-1], lastBonusStillRunning());
 
         additionalQuarterRewards[currentQuarterIndex] += _bonus;
