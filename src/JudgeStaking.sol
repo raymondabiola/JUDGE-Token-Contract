@@ -68,8 +68,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     mapping(uint256 => uint256) public quarterAccruedBonusRewardsForStakes; //Maps total bonus rewards accrued (both claimed and pending) in each quarter
     mapping(address => uint256) public feeBalanceOfStrandedToken; //mapping of accumulated fee of recovered misplaced tokens
 
-
-
     event RewardsFunded(uint256 amount);
     event Deposited(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount, uint256 rewardsPaid);
@@ -114,7 +112,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         validAddress(_judgeTokenAddress)
     {
         require(_judgeTokenAddress.code.length > 0, EOANotAllowed());
-        require(earlyWithdrawPenaltyPercentForMaxLockupPeriod <= maxPenaltyPercent, ValueTooHigh());
+        require(_earlyWithdrawPenaltyPercentForMaxLockupPeriod <= maxPenaltyPercent, ValueTooHigh());
         judgeToken = JudgeToken(_judgeTokenAddress);
         newStakeId = 1;
         earlyWithdrawPenaltyPercentForMaxLockupPeriod = _earlyWithdrawPenaltyPercentForMaxLockupPeriod;
@@ -168,6 +166,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         notEOA(_judgeTreasuryAddress)
     {
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
+        _grantRole(REWARDS_PER_BLOCK_CALCULATOR, _judgeTreasuryAddress);
         emit JudgeTreasuryAddressUpdated(_judgeTreasuryAddress);
     }
 
@@ -286,10 +285,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         validAmount(_lockUpPeriodInDays)
     {
         require(_lockUpPeriodInDays <= maxLockUpPeriod, InvalidLockUpPeriod());
-        if (!isUser[msg.sender]) {
-            users.push(msg.sender);
-            isUser[msg.sender] = true;
-        }
 
         updatePool();
 
@@ -319,6 +314,11 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         judgeToken.safeTransferFrom(msg.sender, address(this), _amount);
         userStakes[msg.sender].push(newStake);
+
+        if (!isUser[msg.sender]) {
+            users.push(msg.sender);
+            isUser[msg.sender] = true;
+        }
 
         newStakeId++;
         emit Deposited(msg.sender, _amount);
@@ -548,8 +548,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         tempQuarterAccruedBonusRewards += totalBonusRewardSinceLastRewardBlock;
         }
 
-        uint256 unClaimedBaseRewards = tempQuarterAccruedRewards - quarterRewardsPaid[index];
-        uint256 unClaimedBonusRewards = tempQuarterAccruedBonusRewards - quarterBonusRewardsPaid[index];
+        uint256 unClaimedBaseRewards = tempQuarterAccruedRewards > quarterRewardsPaid[index] ? tempQuarterAccruedRewards - quarterRewardsPaid[index] : 0;
+        uint256 unClaimedBonusRewards = tempQuarterAccruedBonusRewards > quarterBonusRewardsPaid ? tempQuarterAccruedBonusRewards - quarterBonusRewardsPaid[index] : 0;
         return unClaimedBaseRewards + unClaimedBonusRewards;
     }
 
