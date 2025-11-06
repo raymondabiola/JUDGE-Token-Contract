@@ -202,7 +202,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function getQuarterIndexFromBlock(uint256 blockNumber) internal view returns(uint32){
-        return uint32(blockNumber > stakingPoolStartBlock > ((blockNumber - stakingPoolStartBlock) / QUARTER_BLOCKS) +1 : 1);
+        return uint32(blockNumber > stakingPoolStartBlock ? ((blockNumber - stakingPoolStartBlock) / QUARTER_BLOCKS) +1 : 1);
     }
 
     function syncQuarterBonusRewardsPerBlock(uint32 quarterIndex, uint256 _bonus, uint256 _durationInBlocks) external onlyRole(REWARDS_PER_BLOCK_CALCULATOR){
@@ -550,7 +550,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
 
         uint256 unClaimedBaseRewards = tempQuarterAccruedRewards > quarterRewardsPaid[index] ? tempQuarterAccruedRewards - quarterRewardsPaid[index] : 0;
-        uint256 unClaimedBonusRewards = tempQuarterAccruedBonusRewards > quarterBonusRewardsPaid ? tempQuarterAccruedBonusRewards - quarterBonusRewardsPaid[index] : 0;
+        uint256 unClaimedBonusRewards = tempQuarterAccruedBonusRewards > quarterBonusRewardsPaid[index] ? tempQuarterAccruedBonusRewards - quarterBonusRewardsPaid[index] : 0;
         return unClaimedBaseRewards + unClaimedBonusRewards;
     }
 
