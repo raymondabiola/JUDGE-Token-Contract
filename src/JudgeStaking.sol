@@ -499,45 +499,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit EarlyWithdrawalPenalized(msg.sender, block.number, penalty);
     }
 
-    /* NOTE: Treat the emergencyWithdraw function with caution, It is an exit route and when called withdraws all user stakes 
-    to their wallets. Only use when there is a serious issue with the staking pool.*/
-    function emergencyWithdraw() external onlyRole(STAKING_ADMIN_ROLE) nonReentrant {
-        // consider batch withdrawals for this function to prevent out of gas issues
-        require(address(rewardsManager) != address(0), RewardsManagerNotSet());
-        require(!emergencyFuncCalled, AlreadyTriggered());
-        emergencyFuncCalled = true;
-        uint32 currentQuarterIndex = getCurrentQuarterIndex();
-        updatePool();
-        for (uint32 i; i < users.length; i++) {
-            address userAddr = users[i];
-            for (uint16 j; j < userStakes[users[i]].length; j++) {
-                userStake storage stake = userStakes[users[i]][j];
-
-                if (stake.amountStaked > 0) {
-                    uint256 pending = Math.mulDiv(stake.stakeWeight, accJudgePerShare, SCALE) - stake.rewardDebt;
-                    uint256 pendingBonus =
-                        Math.mulDiv(stake.stakeWeight, accBonusJudgePerShare, SCALE) - stake.bonusRewardDebt;
-
-                    uint256 amount = stake.amountStaked;
-
-                    rewardsManager.sendRewards(userAddr, pending);
-                    quarterRewardsPaid[currentQuarterIndex] += pending;
-                    rewardsManager.sendBonus(userAddr, pendingBonus);
-                    quarterBonusRewardsPaid[currentQuarterIndex] += pendingBonus;
-                    judgeToken.safeTransfer(userAddr, amount);
-
-                    totalStakeWeight -= stake.stakeWeight;
-                    stake.amountStaked = 0;
-                    stake.stakeWeight = 0;
-                    totalStaked -= amount;
-                    stake.rewardDebt = 0;
-                    stake.bonusRewardDebt = 0;
-                    emit EmergencyWithdrawal(msg.sender, userAddr, stake.id, amount, pending + pendingBonus);
-                }
-            }
-        }
-    }
-
     function calculateQuarterUnclaimedRewards(uint32 index) external view returns (uint256) {
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
         require(index <= currentQuarterIndex, QuarterNotStarted());
