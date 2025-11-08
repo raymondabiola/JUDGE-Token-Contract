@@ -29,6 +29,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint256 public stakingPoolStartBlock;
     uint256 public constant QUARTER_BLOCKS = 648_000;
     uint8 public constant MAX_UPDATE_QUARTERS = 4;
+    uint32 public lastFullyUpdatedQuarter;
     uint64 private newStakeId;
     uint256 public accJudgePerShare; //cummulated JUDGE base rewards that a single JUDGE token stake weight is expected to receive
     uint256 public accBonusJudgePerShare; //cummulated JUDGE bonus rewards that a single JUDGE token stake weight is expected to receive
@@ -281,6 +282,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         quarterAccruedBonusRewardsForStakes[startQuarter] += bonusReward;
 
         lastRewardBlock = endBlock;
+        lastFullyUpdatedQuarter = startQuarter;
         unchecked{
         startQuarter++;
         processed++;
@@ -288,6 +290,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
     }
 
+    function isPoolUpToDate()public view returns(bool){
+        return !(lastFullyUpdatedQuarter < getCurrentQuarterIndex()-1);
+    }
 
     function deposit(uint256 _amount, uint32 _lockUpPeriodInDays)
         external
@@ -295,8 +300,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         validAmount(_lockUpPeriodInDays)
     {
         require(_lockUpPeriodInDays <= maxLockUpPeriod, InvalidLockUpPeriod());
-
-        updatePool(); /**Becomes a bug when there are many missed quarters and a user calls deposit function. Fix it */
+        updatePool();
+        require(isPoolUpToDate(), PoolNotUpToDate());
 
         uint256 amountStaked = _amount;
         uint32 lockUpPeriod = _lockUpPeriodInDays;
@@ -351,8 +356,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(stake.amountStaked > 0, ZeroStakeBalance());
-
         updatePool();
+        require(isPoolUpToDate(), PoolNotUpToDate());
+
         uint256 pending = accumulatedStakeRewards(_index) - stake.rewardDebt;
         uint256 pendingBonus = accumulatedStakeBonusRewards(_index) - stake.bonusRewardDebt;
 
@@ -377,8 +383,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number >= stake.maturityBlockNumber, NotYetMatured());
         require(_amount <= stake.amountStaked, InsufficientBalance());
-
         updatePool();
+        require(isPoolUpToDate(), PoolNotUpToDate());
+
         uint256 pending = accumulatedStakeRewards(_index) - stake.rewardDebt;
         uint256 pendingBonus = accumulatedStakeBonusRewards(_index) - stake.bonusRewardDebt;
 
@@ -412,6 +419,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number >= stake.maturityBlockNumber, NotYetMatured());
         updatePool();
+        require(isPoolUpToDate(), PoolNotUpToDate());
+
         uint256 pending = accumulatedStakeRewards(_index) - stake.rewardDebt;
         uint256 pendingBonus = accumulatedStakeBonusRewards(_index) - stake.bonusRewardDebt;
 
@@ -451,8 +460,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number < stake.maturityBlockNumber, AlreadyMatured());
         require(_amount <= stake.amountStaked, InsufficientBalance());
-
         updatePool();
+        require(isPoolUpToDate(), PoolNotUpToDate());
+
         uint256 pending = accumulatedStakeRewards(_index) - stake.rewardDebt;
         uint256 pendingBonus = accumulatedStakeBonusRewards(_index) - stake.bonusRewardDebt;
 
