@@ -28,7 +28,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     uint256 public stakingPoolStartBlock;
     uint256 public constant QUARTER_BLOCKS = 648_000;
-    uint32 public constant MAX_UPDATE_QUARTERS = 4;
+    uint8 public constant MAX_UPDATE_QUARTERS = 4;
     uint64 private newStakeId;
     uint256 public accJudgePerShare; //cummulated JUDGE base rewards that a single JUDGE token stake weight is expected to receive
     uint256 public accBonusJudgePerShare; //cummulated JUDGE bonus rewards that a single JUDGE token stake weight is expected to receive
@@ -251,6 +251,14 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 rpb = rewardsPerBlockForQuarter[startQuarter];
         uint256 bpb = bonusPerBlockForQuarter[startQuarter];
 
+        if(rpb == 0 && bpb == 0){
+            unchecked{
+                startQuarter++;
+                processed++;
+            }
+            continue;
+        }
+
         uint256 endBlock = (startQuarter == currentQuarterIndex) ? block.number : quarterEnd;
 
         uint256 reward = 0;
@@ -447,8 +455,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 penalty = Math.mulDiv(
             _amount, Math.mulDiv(earlyWithdrawPenaltyPercentForMaxLockupPeriod, stake.lockUpRatio, SCALE), 100
         );
-        uint256 deduction = _amount + penalty;
-        require(deduction <= stake.amountStaked, InsufficientBalance());
+        uint256 netAmount = _amount - penalty;
 
         judgeToken.safeTransfer(address(judgeTreasury), penalty);
         totalPenalties += penalty;
@@ -468,22 +475,22 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             // Same here
         }
 
-        judgeToken.safeTransfer(msg.sender, _amount);
+        judgeToken.safeTransfer(msg.sender, netAmount);
+        stake.amountStaked -= _amount;
 
-        if (deduction == stake.amountStaked) {
-            stake.amountStaked = 0;
+        if (stake.amountStaked == 0) {
             stake.stakeWeight = 0;
             stake.rewardDebt = 0;
             stake.bonusRewardDebt = 0;
         } else {
-            stake.amountStaked -= deduction;
             stake.stakeWeight = Math.mulDiv(stake.amountStaked, stake.lockUpRatio, SCALE);
-            totalStakeWeight = totalStakeWeight - oldStakeWeight + stake.stakeWeight;
             stake.rewardDebt = accumulatedStakeRewards(_index);
             stake.bonusRewardDebt = accumulatedStakeBonusRewards(_index);
         }
-        totalStaked -= deduction;
-        emit Withdrawn(msg.sender, _amount, pending + pendingBonus);
+
+        totalStakeWeight = totalStakeWeight - oldStakeWeight + stake.stakeWeight;
+        totalStaked -= _amount;
+        emit Withdrawn(msg.sender, _netAmount, pending + pendingBonus);
         emit EarlyWithdrawalPenalized(msg.sender, block.number, penalty);
     }
 
@@ -597,12 +604,22 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             uint32 currentQuarter = getCurrentQuarterIndex();
             uint256 tempLastRewardBlock = lastRewardBlock;
 
-            while(startQuarter <= currentQuarter) {
+            uint8 processed = 0;
+            uint8 maxSimulatedQuarters = 12;
+            while(startQuarter <= currentQuarter && processed < MAX_UPDATE_QUARTERS) {
                 uint256 quarterStart = stakingPoolStartBlock + (uint256(startQuarter) - 1) * QUARTER_BLOCKS;
                 uint256 quarterEnd = quarterStart + QUARTER_BLOCKS;
 
                 uint256 rpb = rewardsPerBlockForQuarter[startQuarter];
                 uint bpb = bonusPerBlockForQuarter[startQuarter]; 
+
+                if(rpb == 0 && bpb == 0){
+                   unchecked{
+                    startQuarter++;
+                       processed++;
+                   }
+                   continue;
+                }
 
                 uint256 endBlock = (startQuarter == currentQuarter) ? block.number : quarterEnd;
                 uint256 reward = 0;
@@ -622,7 +639,10 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                     tempAccBonusJudgePerShare += Math.mulDiv(bonusReward, SCALE, totalStakeWeight);
                     tempLastRewardBlock = endBlock;
                 }
-                unchecked{startQuarter ++;}
+                unchecked{
+                    startQuarter ++;
+                    processed++;
+                }
             }
         }
 
