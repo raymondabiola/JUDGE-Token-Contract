@@ -36,6 +36,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint256 public totalStakeWeight; //The total calculated stake weights of all stakers based on the stake amount and chosen lockup period.
     uint256 public totalStaked;
     uint64 private constant SCALE = 1e18;
+    uint32 private constant BLOCKS_PER_YEAR = 2_628_000;
     address[] internal users;
     uint16 private constant maxLockUpPeriod = 360;
     uint8 public earlyWithdrawPenaltyPercentForMaxLockupPeriod; //This is the penalty percent that is charged on a user stake if they
@@ -106,8 +107,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     error EOANotAllowed();
     error ValueHigherThanThreshold();
     error NotUpToThreshold();
-    error OverPaidRewards();
     error QuarterNotStarted();
+    error RewardsManagerNotSet()
 
     constructor(address _judgeTokenAddress, uint8 _earlyWithdrawPenaltyPercentForMaxLockupPeriod)
         validAddress(_judgeTokenAddress)
@@ -226,8 +227,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             return 0;
         }
         // APR is scaled by 1e18, divide by same factor and multiply by 100 to get exact value
-        uint256 apr1 = Math.mulDiv(Math.mulDiv(rewardsPerBlockForQuarter[currentQuarterIndex], 2_628_000, 1), 1e18, totalStakeWeight);
-        uint256 apr2 = Math.mulDiv(Math.mulDiv(bonusPerBlockForQuarter[currentQuarterIndex], 2_628_000, 1), 1e18, totalStakeWeight);
+        uint256 apr1 = Math.mulDiv(Math.mulDiv(rewardsPerBlockForQuarter[currentQuarterIndex], BLOCKS_PER_YEAR, 1), 1e18, totalStakeWeight);
+        uint256 apr2 = Math.mulDiv(Math.mulDiv(bonusPerBlockForQuarter[currentQuarterIndex], BLOCKS_PER_YEAR, 1), 1e18, totalStakeWeight);
 
         return apr1 + apr2;
     }
@@ -295,7 +296,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     {
         require(_lockUpPeriodInDays <= maxLockUpPeriod, InvalidLockUpPeriod());
 
-        updatePool();
+        updatePool(); /**Becomes a bug when there are many missed quarters and a user calls deposit function. Fix it */
 
         uint256 amountStaked = _amount;
         uint32 lockUpPeriod = _lockUpPeriodInDays;
@@ -346,6 +347,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function claimRewards(uint16 _index) external validIndex(_index) nonReentrant {
+           require(address(rewardsManager) != address(0), RewardsManagerNotSet());
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(stake.amountStaked > 0, ZeroStakeBalance());
@@ -370,6 +372,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function withdraw(uint256 _amount, uint16 _index) external validAmount(_amount) validIndex(_index) nonReentrant {
+        require(address(rewardsManager) != address(0), RewardsManagerNotSet());
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number >= stake.maturityBlockNumber, NotYetMatured());
@@ -404,6 +407,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function withdrawAll(uint16 _index) external validIndex(_index) nonReentrant {
+        require(address(rewardsManager) != address(0), RewardsManagerNotSet());
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number >= stake.maturityBlockNumber, NotYetMatured());
@@ -442,6 +446,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         validIndex(_index)
         nonReentrant
     {
+        require(address(rewardsManager) != address(0), RewardsManagerNotSet());
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number < stake.maturityBlockNumber, AlreadyMatured());
@@ -497,6 +502,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     /* NOTE: Treat the emergencyWithdraw function with caution, It is an exit route and when called withdraws all user stakes 
     to their wallets. Only use when there is a serious issue with the staking pool.*/
     function emergencyWithdraw() external onlyRole(STAKING_ADMIN_ROLE) nonReentrant {
+        // consider batch withdrawals for this function to prevent out of gas issues
+        require(address(rewardsManager) != address(0), RewardsManagerNotSet());
         require(!emergencyFuncCalled, AlreadyTriggered());
         emergencyFuncCalled = true;
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
