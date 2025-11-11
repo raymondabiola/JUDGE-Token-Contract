@@ -22,33 +22,41 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     JudgeTreasury public judgeTreasury;
     IRewardsManager public rewardsManager;
 
+    // == ROLES ==
     bytes32 public constant STAKING_ADMIN_ROLE = keccak256("STAKING_ADMIN_ROLE");
     bytes32 public constant TOKEN_RECOVERY_ROLE = keccak256("TOKEN_RECOVERY_ROLE");
     bytes32 public constant REWARDS_PER_BLOCK_CALCULATOR = keccak256("REWARDS_PER_BLOCK_CALCULATOR"); //Assign to judgeTreasury at deployment
 
-    uint256 public stakingPoolStartBlock;
-    uint256 public constant QUARTER_BLOCKS = 648_000;
+    // == CONSTANTS ==
+    uint256 public constant SCALE = 1e18; // 18 decimals
+    uint256 public constant QUARTER_BLOCKS = 648_000; // ~90 days at 12s/block
+    uint32 public constant BLOCKS_PER_YEAR = 2_628_000;  // 12 sec blocktime
     uint8 public constant MAX_UPDATE_QUARTERS = 4;
+    uint16 public constant MAX_LOCK_UP_PERIOD_DAYS = 360; // 1 year max lock
+    uint8 public constant MAX_PENALTY_PERCENT = 20;
+    uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30;
+
+    uint256 public stakingPoolStartBlock;
     uint32 public lastFullyUpdatedQuarter;
     uint64 private newStakeId;
-    uint256 public accJudgePerShare; //cummulated JUDGE base rewards that a single JUDGE token stake weight is expected to receive
-    uint256 public accBonusJudgePerShare; //cummulated JUDGE bonus rewards that a single JUDGE token stake weight is expected to receive
+    uint256 public accJudgePerShare; 
+    uint256 public accBonusJudgePerShare;
     uint256 public lastRewardBlock;
-    uint256 public totalStakeWeight; //The total calculated stake weights of all stakers based on the stake amount and chosen lockup period.
+    uint256 public totalStakeWeight;
     uint256 public totalStaked;
-    uint64 private constant SCALE = 1e18;
-    uint32 private constant BLOCKS_PER_YEAR = 2_628_000;
-    address[] internal users;
-    uint16 private constant maxLockUpPeriod = 360;
     uint8 public earlyWithdrawPenaltyPercentForMaxLockupPeriod; //This is the penalty percent that is charged on a user stake if they
-    //lockup for 360 days maxLockUpPeriod and withdraw early, for lower lockUpPeriods, the penalty is scaled down based on duration/maxLockUpPeriod
-    uint256 public totalPenalties; //total penalty fees recieved for all users who did unripe withdrawals
-    bool public emergencyFuncCalled; //Boolean prevents the emergency function from being called more than once
-    uint8 public constant maxPenaltyPercent = 20;
+    //lockup for 360 days MAX_LOCK_UP_PERIOD_DAYS and withdraw early, for lower lockUpPeriods, the penalty is scaled down based on duration/MAX_LOCK_UP_PERIOD_DAYS
+    uint256 public totalPenalties; 
     uint8 public feePercent; //Fee charged to recover misplaced JudgeTokens sent to the contract
-    uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30;
     uint256 public judgeRecoveryMinimumThreshold; //Feasible minimum amount of JudgeTokens that's worth recovering
+    uint256 public totalClaimedBaseRewards; 
+    uint256 public totalClaimedBonusRewards;
+    uint256 public totalAccruedBaseRewards; 
+    uint256 public totalAccruedBonusRewards; 
 
+    address[] internal users;
+    mapping(address => userStake[]) internal userStakes; 
+    mapping(address => bool) internal isUser; 
     struct userStake {
         uint64 id;
         uint256 amountStaked;
@@ -61,22 +69,13 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 maturityBlockNumber;
     }
 
-    mapping(address => userStake[]) internal userStakes; //Mapping that maps every userStakes as a struct array to their address
-    mapping(address => bool) internal isUser; //Mapping checks if a user address has staked before, preventing duplicate address in userlist
     mapping(uint32 => uint256) public rewardsPerBlockForQuarter;
     mapping(uint32 => uint256) public bonusPerBlockForQuarter;
-    uint256 public totalClaimedBaseRewards; 
-    uint256 public totalClaimedBonusRewards;
-    uint256 public totalAccruedBaseRewards; //Maps total base rewards accrued (both claimed and pending) in each quarter
-    uint256 public totalAccruedBonusRewards; //Maps total bonus rewards accrued (both claimed and pending) in each quarter
-    mapping(address => uint256) public feeBalanceOfStrandedToken; //mapping of accumulated fee of recovered misplaced tokens
+    mapping(address => uint256) public feeBalanceOfStrandedToken;
 
-    event RewardsFunded(uint256 amount);
+    // == EVENTS ==
     event Deposited(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount, uint256 rewardsPaid);
-    event EmergencyWithdrawal(
-        address indexed admin, address indexed user, uint256 stakeID, uint256 stakeWithdrawn, uint256 rewardsPaid
-    );
     event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
     event RewardsManagerAddressUpdated(address indexed newRewardsManagerAddress);
     event JudgeTreasuryAddressUpdated(address indexed newJudgeTreasuryAddress);
@@ -92,11 +91,11 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         address indexed tokenAddress, address indexed to, uint256 feeTransferred, uint256 feeBalanceOfStrandedToken
     );
 
+    // == ERRORS ==
     error InvalidAmount();
     error InvalidAddress();
     error InvalidIndex();
     error InsufficientBalance();
-    error AlreadyTriggered();
     error NotYetMatured();
     error InvalidLockUpPeriod();
     error AlreadyMatured();
@@ -108,7 +107,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     error EOANotAllowed();
     error ValueHigherThanThreshold();
     error NotUpToThreshold();
-    error QuarterNotStarted();
     error RewardsManagerNotSet();
     error PoolNotUpToDate();
 
@@ -116,7 +114,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         validAddress(_judgeTokenAddress)
     {
         require(_judgeTokenAddress.code.length > 0, EOANotAllowed());
-        require(_earlyWithdrawPenaltyPercentForMaxLockupPeriod <= maxPenaltyPercent, ValueTooHigh());
+        require(_earlyWithdrawPenaltyPercentForMaxLockupPeriod <= MAX_PENALTY_PERCENT, ValueTooHigh());
         judgeToken = JudgeToken(_judgeTokenAddress);
         newStakeId = 1;
         earlyWithdrawPenaltyPercentForMaxLockupPeriod = _earlyWithdrawPenaltyPercentForMaxLockupPeriod;
@@ -126,6 +124,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit EarlyWithdrawPenaltyPercentForMaxLockupPeriodInitialized(_earlyWithdrawPenaltyPercentForMaxLockupPeriod);
     }
 
+    // == MODIFIERS ==
     modifier validAmount(uint256 _amount) {
         require(_amount > 0, InvalidAmount());
         _;
@@ -151,6 +150,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         _;
     }
 
+    // == ADMIN FUNCTIONS ==
     function setRewardsManagerAddress(address _rewardsManagerAddress)
         external
         onlyRole(STAKING_ADMIN_ROLE)
@@ -179,7 +179,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         validAmount(_earlyWithdrawPenaltyPercentForMaxLockupPeriod)
         onlyRole(STAKING_ADMIN_ROLE)
     {
-        require(_earlyWithdrawPenaltyPercentForMaxLockupPeriod <= maxPenaltyPercent, ValueTooHigh());
+        require(_earlyWithdrawPenaltyPercentForMaxLockupPeriod <= MAX_PENALTY_PERCENT, ValueTooHigh());
         earlyWithdrawPenaltyPercentForMaxLockupPeriod = _earlyWithdrawPenaltyPercentForMaxLockupPeriod;
         emit EarlyWithdrawPenaltyPercentForMaxLockupPeriodUpdated(_earlyWithdrawPenaltyPercentForMaxLockupPeriod);
     }
@@ -200,12 +200,25 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         emit JudgeRecoveryMinimumThresholdUpdated(oldJudgeRecoveryMinimumThreshold, newJudgeRecoveryMinimumThreshold);
     }
 
+    // == POOL CORE FUNCTIONS ==
     function getCurrentQuarterIndex() public view returns (uint32) {
         return uint32((block.number - stakingPoolStartBlock) / QUARTER_BLOCKS + 1);
     }
 
-    function getQuarterIndexFromBlock(uint256 blockNumber) internal view returns(uint32){
+    function getQuarterIndexFromBlock(uint256 blockNumber) public view returns(uint32){
         return uint32(blockNumber > stakingPoolStartBlock ? ((blockNumber - stakingPoolStartBlock) / QUARTER_BLOCKS) +1 : 1);
+    }
+
+    function getCurrentAPR() public view returns (uint256) {
+        uint32 currentQuarterIndex = getCurrentQuarterIndex();
+        if (totalStakeWeight == 0) {
+            return 0;
+        }
+        // APR is scaled by 1e18, divide by same factor and multiply by 100 to get exact value
+        uint256 apr1 = Math.mulDiv(Math.mulDiv(rewardsPerBlockForQuarter[currentQuarterIndex], BLOCKS_PER_YEAR, 1), 1e18, totalStakeWeight);
+        uint256 apr2 = Math.mulDiv(Math.mulDiv(bonusPerBlockForQuarter[currentQuarterIndex], BLOCKS_PER_YEAR, 1), 1e18, totalStakeWeight);
+
+        return apr1 + apr2;
     }
 
     function syncQuarterBonusRewardsPerBlock(uint32 quarterIndex, uint256 _bonus, uint256 _durationInBlocks) external onlyRole(REWARDS_PER_BLOCK_CALCULATOR){
@@ -221,18 +234,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
 
         rewardsPerBlockForQuarter[quarterIndex] = rpb;
-    }
-
-    function getCurrentAPR() public view returns (uint256) {
-        uint32 currentQuarterIndex = getCurrentQuarterIndex();
-        if (totalStakeWeight == 0) {
-            return 0;
-        }
-        // APR is scaled by 1e18, divide by same factor and multiply by 100 to get exact value
-        uint256 apr1 = Math.mulDiv(Math.mulDiv(rewardsPerBlockForQuarter[currentQuarterIndex], BLOCKS_PER_YEAR, 1), 1e18, totalStakeWeight);
-        uint256 apr2 = Math.mulDiv(Math.mulDiv(bonusPerBlockForQuarter[currentQuarterIndex], BLOCKS_PER_YEAR, 1), 1e18, totalStakeWeight);
-
-        return apr1 + apr2;
     }
 
     function updatePool() public {
@@ -295,18 +296,31 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return !(lastFullyUpdatedQuarter < getCurrentQuarterIndex()-1);
     }
 
+    function accumulatedStakeRewards(uint16 _index) internal view returns (uint256) {
+        userStake storage stake = userStakes[msg.sender][_index];
+        uint256 accRewards = Math.mulDiv(stake.stakeWeight, accJudgePerShare, SCALE);
+        return accRewards;
+    }
+
+    function accumulatedStakeBonusRewards(uint16 _index) internal view returns (uint256) {
+        userStake storage stake = userStakes[msg.sender][_index];
+        uint256 accBonusRewards = Math.mulDiv(stake.stakeWeight, accBonusJudgePerShare, SCALE);
+        return accBonusRewards;
+    }
+
+    // == USER WRITE FUNCTIONS ==
     function deposit(uint256 _amount, uint32 _lockUpPeriodInDays)
         external
         validAmount(_amount)
         validAmount(_lockUpPeriodInDays)
     {
-        require(_lockUpPeriodInDays <= maxLockUpPeriod, InvalidLockUpPeriod());
+        require(_lockUpPeriodInDays <= MAX_LOCK_UP_PERIOD_DAYS, InvalidLockUpPeriod());
         updatePool();
         require(isPoolUpToDate(), PoolNotUpToDate());
 
         uint256 amountStaked = _amount;
         uint32 lockUpPeriod = _lockUpPeriodInDays;
-        uint256 lockUpRatio = Math.mulDiv(lockUpPeriod, SCALE, maxLockUpPeriod);
+        uint256 lockUpRatio = Math.mulDiv(lockUpPeriod, SCALE, MAX_LOCK_UP_PERIOD_DAYS);
         uint256 depositBlockNumber = block.number;
         uint256 maturityBlockNumber = depositBlockNumber + (lockUpPeriod * 7200);
         uint256 stakeWeight = Math.mulDiv(amountStaked, lockUpRatio, SCALE);
@@ -338,18 +352,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         newStakeId++;
         emit Deposited(msg.sender, _amount);
-    }
-
-    function accumulatedStakeRewards(uint16 _index) internal view returns (uint256) {
-        userStake storage stake = userStakes[msg.sender][_index];
-        uint256 accRewards = Math.mulDiv(stake.stakeWeight, accJudgePerShare, SCALE);
-        return accRewards;
-    }
-
-    function accumulatedStakeBonusRewards(uint16 _index) internal view returns (uint256) {
-        userStake storage stake = userStakes[msg.sender][_index];
-        uint256 accBonusRewards = Math.mulDiv(stake.stakeWeight, accBonusJudgePerShare, SCALE);
-        return accBonusRewards;
     }
 
     function claimRewards(uint16 _index) external validIndex(_index) nonReentrant {
@@ -504,37 +506,13 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return (base, bonus, total);
     }
 
+    // == USER VIEW FUNCTIONS ==
     function viewMyStakes() external view returns (userStake[] memory) {
         return userStakes[msg.sender];
     }
 
     function viewMyStakeAtIndex(uint16 _index) external view validIndex(_index) returns (userStake memory) {
         return userStakes[msg.sender][_index];
-    }
-
-    function viewUsersList() external view onlyRole(STAKING_ADMIN_ROLE) returns (address[] memory) {
-        return users;
-    }
-
-    function viewUserStakes(address addr)
-        external
-        view
-        validAddress(addr)
-        onlyRole(STAKING_ADMIN_ROLE)
-        returns (userStake[] memory)
-    {
-        return userStakes[addr];
-    }
-
-    function viewUserStakeAtIndex(address addr, uint16 _index)
-        external
-        view
-        validAddress(addr)
-        onlyRole(STAKING_ADMIN_ROLE)
-        returns (userStake memory)
-    {
-        require(_index < userStakes[addr].length, InvalidIndex());
-        return userStakes[addr][_index];
     }
 
     function viewMyPendingRewards(uint16 _index) external view validIndex(_index) returns (uint256) {
@@ -603,6 +581,33 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return pendingReward + pendingBonus;
     }
 
+    // == ADMIN VIEW FUNCTIONS ==
+    function viewUsersList() external view onlyRole(STAKING_ADMIN_ROLE) returns (address[] memory) {
+        return users;
+    }
+
+    function viewUserStakes(address addr)
+        external
+        view
+        validAddress(addr)
+        onlyRole(STAKING_ADMIN_ROLE)
+        returns (userStake[] memory)
+    {
+        return userStakes[addr];
+    }
+
+    function viewUserStakeAtIndex(address addr, uint16 _index)
+        external
+        view
+        validAddress(addr)
+        onlyRole(STAKING_ADMIN_ROLE)
+        returns (userStake memory)
+    {
+        require(_index < userStakes[addr].length, InvalidIndex());
+        return userStakes[addr][_index];
+    }
+
+    // == TOKEN RECOVERY FUNCTIONS ==
     function calculateMisplacedJudge() public view returns (uint256) {
         uint256 contractBalance = judgeToken.balanceOf(address(this));
         uint256 misplacedJudgeAmount = 0;
