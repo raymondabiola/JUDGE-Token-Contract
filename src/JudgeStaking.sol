@@ -248,8 +248,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint32 startQuarter = getQuarterIndexFromBlock(lastRewardBlock);
         uint32 processed = 0;
         while(startQuarter <= currentQuarterIndex && processed < MAX_UPDATE_QUARTERS){
-        uint256 quarterStart = stakingPoolStartBlock + (uint256(startQuarter) - 1) * 648_000;
-        uint256 quarterEnd = quarterStart + 648_000;
+        uint256 quarterStart = stakingPoolStartBlock + (uint256(startQuarter) - 1) * QUARTER_BLOCKS;
+        uint256 quarterEnd = quarterStart + QUARTER_BLOCKS;
         uint256 startQuarterBonusEnd = judgeTreasury.bonusEndBlock(startQuarter);
 
         uint256 rpb = rewardsPerBlockForQuarter[startQuarter];
@@ -259,8 +259,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             unchecked{
                 startQuarter++;
                 processed++;
-            }
             continue;
+            }
         }
 
         uint256 endBlock = (startQuarter == currentQuarterIndex) ? block.number : quarterEnd;
@@ -404,10 +404,18 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         uint256 oldStakeWeight = stake.stakeWeight;
         stake.amountStaked -= _amount;
+
+        if(stake.amountStaked == 0){
+            totalStakeWeight -= oldStakeWeight;
+            stake.stakeWeight = 0;
+            stake.rewardDebt = 0;
+            stake.bonusRewardDebt = 0;
+        } else{
         stake.stakeWeight = Math.mulDiv(stake.amountStaked, stake.lockUpRatio, SCALE);
         totalStakeWeight =totalStakeWeight - oldStakeWeight + stake.stakeWeight;
         stake.rewardDebt = accumulatedStakeRewards(_index);
         stake.bonusRewardDebt = accumulatedStakeBonusRewards(_index);
+        }
         totalStaked -= _amount;
         emit Withdrawn(msg.sender, _amount, pending + pendingBonus);
     }
@@ -526,8 +534,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             uint256 tempLastRewardBlock = lastRewardBlock;
 
             uint8 processed = 0;
-            uint8 maxSimulatedQuarters = 12;
-            while(startQuarter <= currentQuarter && processed < MAX_UPDATE_QUARTERS) {
+            uint8 maxSimulatedQuarters = 12; //12 quarters safe for simulation since it's a view function
+            while(startQuarter <= currentQuarter && processed < maxSimulatedQuarters) {
                 uint256 quarterStart = stakingPoolStartBlock + (uint256(startQuarter) - 1) * QUARTER_BLOCKS;
                 uint256 quarterEnd = quarterStart + QUARTER_BLOCKS;
 
@@ -537,9 +545,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                 if(rpb == 0 && bpb == 0){
                    unchecked{
                     startQuarter++;
-                       processed++;
-                   }
+                    processed++;
                    continue;
+                   }
                 }
 
                 uint256 endBlock = (startQuarter == currentQuarter) ? block.number : quarterEnd;
