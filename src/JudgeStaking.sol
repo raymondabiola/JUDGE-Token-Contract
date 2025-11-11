@@ -65,10 +65,10 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     mapping(address => bool) internal isUser; //Mapping checks if a user address has staked before, preventing duplicate address in userlist
     mapping(uint32 => uint256) public rewardsPerBlockForQuarter;
     mapping(uint32 => uint256) public bonusPerBlockForQuarter;
-    mapping(uint256 => uint256) public quarterRewardsPaid; //Maps total base rewards claimed in each quarter
-    mapping(uint256 => uint256) public quarterBonusRewardsPaid; //Maps total bonus rewards claimed in each quarter
-    mapping(uint256 => uint256) public quarterAccruedRewardsForStakes; //Maps total base rewards accrued (both claimed and pending) in each quarter
-    mapping(uint256 => uint256) public quarterAccruedBonusRewardsForStakes; //Maps total bonus rewards accrued (both claimed and pending) in each quarter
+    uint256 public totalClaimedBaseRewards; 
+    uint256 public totalClaimedBonusRewards;
+    uint256 public totalAccruedBaseRewards; //Maps total base rewards accrued (both claimed and pending) in each quarter
+    uint256 public totalAccruedBonusRewards; //Maps total bonus rewards accrued (both claimed and pending) in each quarter
     mapping(address => uint256) public feeBalanceOfStrandedToken; //mapping of accumulated fee of recovered misplaced tokens
 
     event RewardsFunded(uint256 amount);
@@ -109,7 +109,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     error ValueHigherThanThreshold();
     error NotUpToThreshold();
     error QuarterNotStarted();
-    error RewardsManagerNotSet()
+    error RewardsManagerNotSet();
+    error PoolNotUpToDate();
 
     constructor(address _judgeTokenAddress, uint8 _earlyWithdrawPenaltyPercentForMaxLockupPeriod)
         validAddress(_judgeTokenAddress)
@@ -278,8 +279,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
          accBonusJudgePerShare += Math.mulDiv(bonusReward, SCALE, totalStakeWeight);
         }
 
-        quarterAccruedRewardsForStakes[startQuarter] += reward;
-        quarterAccruedBonusRewardsForStakes[startQuarter] += bonusReward;
+        totalAccruedBaseRewards += reward;
+        totalAccruedBonusRewards += bonusReward;
 
         lastRewardBlock = endBlock;
         lastFullyUpdatedQuarter = startQuarter;
@@ -352,8 +353,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function claimRewards(uint16 _index) external validIndex(_index) nonReentrant {
-           require(address(rewardsManager) != address(0), RewardsManagerNotSet());
-        uint32 currentQuarterIndex = getCurrentQuarterIndex();
+        require(address(rewardsManager) != address(0), RewardsManagerNotSet());
         userStake storage stake = userStakes[msg.sender][_index];
         require(stake.amountStaked > 0, ZeroStakeBalance());
         updatePool();
@@ -364,22 +364,21 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         if (pending > 0) {
             rewardsManager.sendRewards(msg.sender, pending);
-            quarterRewardsPaid[currentQuarterIndex] += pending;
+            totalClaimedBaseRewards += pending;
             stake.rewardDebt = accumulatedStakeRewards(_index);
         }
 
         if (pendingBonus > 0) {
             rewardsManager.sendBonus(msg.sender, pendingBonus);
-            quarterBonusRewardsPaid[currentQuarterIndex] += pendingBonus;
+            totalClaimedBonusRewards += pendingBonus;
             stake.bonusRewardDebt = accumulatedStakeBonusRewards(_index);
         }
 
-        emit ClaimedReward(msg.sender, pending);
+        emit ClaimedReward(msg.sender, pending + pendingBonus);
     }
 
     function withdraw(uint256 _amount, uint16 _index) external validAmount(_amount) validIndex(_index) nonReentrant {
         require(address(rewardsManager) != address(0), RewardsManagerNotSet());
-        uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number >= stake.maturityBlockNumber, NotYetMatured());
         require(_amount <= stake.amountStaked, InsufficientBalance());
@@ -391,14 +390,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         if (pending > 0) {
             rewardsManager.sendRewards(msg.sender, pending);
-            quarterRewardsPaid[currentQuarterIndex] += pending;
-            // Check if it's legit that rewards paid doesnt come from misssed quarters and get added to quarter rewards paid
+            totalClaimedBaseRewards += pending;
         }
 
         if (pendingBonus > 0) {
             rewardsManager.sendBonus(msg.sender, pendingBonus);
-            quarterBonusRewardsPaid[currentQuarterIndex] += pendingBonus;
-            // Same here
+            totalClaimedBonusRewards += pendingBonus;
         }
 
         judgeToken.safeTransfer(msg.sender, _amount);
@@ -415,7 +412,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     function withdrawAll(uint16 _index) external validIndex(_index) nonReentrant {
         require(address(rewardsManager) != address(0), RewardsManagerNotSet());
-        uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number >= stake.maturityBlockNumber, NotYetMatured());
         updatePool();
@@ -428,15 +424,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         if (pending > 0) {
             rewardsManager.sendRewards(msg.sender, pending);
-            quarterRewardsPaid[currentQuarterIndex] += pending;
-
-            // Same here
+            totalClaimedBaseRewards += pending;
         }
 
         if (pendingBonus > 0) {
             rewardsManager.sendBonus(msg.sender, pendingBonus);
-            quarterBonusRewardsPaid[currentQuarterIndex] += pendingBonus;
-            // Same here
+            totalClaimedBonusRewards += pendingBonus;
         }
         judgeToken.safeTransfer(msg.sender, amountWithdrawn);
 
@@ -456,7 +449,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         nonReentrant
     {
         require(address(rewardsManager) != address(0), RewardsManagerNotSet());
-        uint32 currentQuarterIndex = getCurrentQuarterIndex();
         userStake storage stake = userStakes[msg.sender][_index];
         require(block.number < stake.maturityBlockNumber, AlreadyMatured());
         require(_amount <= stake.amountStaked, InsufficientBalance());
@@ -478,16 +470,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         if (pending > 0) {
             rewardsManager.sendRewards(msg.sender, pending);
-            quarterRewardsPaid[currentQuarterIndex] += pending;
-
-            // Same here
+            totalClaimedBaseRewards += pending;
         }
 
         if (pendingBonus > 0) {
             rewardsManager.sendBonus(msg.sender, pendingBonus);
-            quarterBonusRewardsPaid[currentQuarterIndex] += pendingBonus;
-
-            // Same here
+            totalClaimedBonusRewards += pendingBonus;
         }
 
         judgeToken.safeTransfer(msg.sender, netAmount);
@@ -505,38 +493,15 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         totalStakeWeight = totalStakeWeight - oldStakeWeight + stake.stakeWeight;
         totalStaked -= _amount;
-        emit Withdrawn(msg.sender, _netAmount, pending + pendingBonus);
+        emit Withdrawn(msg.sender, netAmount, pending + pendingBonus);
         emit EarlyWithdrawalPenalized(msg.sender, block.number, penalty);
     }
 
-    function calculateQuarterUnclaimedRewards(uint32 index) external view returns (uint256) {
-        uint32 currentQuarterIndex = getCurrentQuarterIndex();
-        require(index <= currentQuarterIndex, QuarterNotStarted());
-
-        uint256 tempQuarterAccruedRewards = quarterAccruedRewardsForStakes[index];
-        uint256 tempQuarterAccruedBonusRewards = quarterAccruedBonusRewardsForStakes[index];
-
-        if(index == currentQuarterIndex){
-        uint256 blocksPassed = 0;
-        if(block.number > lastRewardBlock){
-        blocksPassed = block.number - lastRewardBlock;
-        }
-        uint256 bonusEnd = judgeTreasury.bonusEndBlock(index);
-        uint256 bonusBlocksPassed = 0;
-        if(bonusEnd > lastRewardBlock){
-        bonusBlocksPassed = Math.min(blocksPassed, bonusEnd - lastRewardBlock);
-        }
-
-        uint256 totalRewardSinceLastRewardBlock = blocksPassed * rewardsPerBlockForQuarter[currentQuarterIndex];
-        uint256 totalBonusRewardSinceLastRewardBlock = bonusBlocksPassed * bonusPerBlockForQuarter[currentQuarterIndex];
-
-        tempQuarterAccruedRewards += totalRewardSinceLastRewardBlock;
-        tempQuarterAccruedBonusRewards += totalBonusRewardSinceLastRewardBlock;
-        }
-
-        uint256 unClaimedBaseRewards = tempQuarterAccruedRewards > quarterRewardsPaid[index] ? tempQuarterAccruedRewards - quarterRewardsPaid[index] : 0;
-        uint256 unClaimedBonusRewards = tempQuarterAccruedBonusRewards > quarterBonusRewardsPaid[index] ? tempQuarterAccruedBonusRewards - quarterBonusRewardsPaid[index] : 0;
-        return unClaimedBaseRewards + unClaimedBonusRewards;
+    function totalUnclaimedRewards() external view returns (uint256 base, uint256 bonus, uint256 total) {
+        base = totalAccruedBaseRewards > totalClaimedBaseRewards ? totalAccruedBaseRewards - totalClaimedBaseRewards : 0;
+        bonus = totalAccruedBonusRewards > totalClaimedBonusRewards ? totalAccruedBonusRewards - totalClaimedBonusRewards : 0;
+        total = base + bonus;
+        return (base, bonus, total);
     }
 
     function viewMyStakes() external view returns (userStake[] memory) {
