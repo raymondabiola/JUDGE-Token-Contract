@@ -23,7 +23,8 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     bytes32 public constant REWARDS_MANAGER_PRECISE_BALANCE_UPDATER =
         keccak256("REWARDS_MANAGER_PRECISE_BALANCE_UPDATER"); //Assign Role to judgeTreasury at deployment
 
-    uint256 public totalRewardsPaid; //Total rewards (base + bonus) claimed by users in the staking pool
+    uint256 public totalBaseRewardsPaid;
+    uint256 public totalBonusRewardsPaid;
     uint8 public feePercent; //Fee charged to recover misplaced JudgeTokens sent to the contract
     uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30;
     uint256 public judgeRecoveryMinimumThreshold; //Feasible minimum amount of JudgeTokens that's worth recovering
@@ -33,10 +34,10 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     mapping(address => uint256) public feeBalanceOfStrandedToken; //mapping of accumulated fee of recovered misplaced tokens
 
     event JudgeTokenAddressWasSet(address indexed judgeTokenAddress);
-    event JudgeTreasuryAdressUpdated(address indexed judgeTreasuryAddress);
+    event JudgeTreasuryAddressUpdated(address indexed judgeTreasuryAddress);
     event JudgeRecoveryMinimumThresholdUpdated(uint256 oldValue, uint256 newValue);
     event FeePercentUpdated(uint8 oldValue, uint8 newValue);
-    event AdminWithdrawed(address indexed admin, address indexed receiver, uint256 amount);
+    event AdminWithdrawn(address indexed admin, address indexed receiver, uint256 amount);
     event EmergencyWithdrawal(address indexed admin, address indexed receiver, uint256 amount);
     event Erc20Recovered(address indexed tokenAddress, address indexed to, uint256 refund, uint256 fee);
     event FeesFromOtherTokensTransferred(
@@ -53,6 +54,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     error InsufficientBalance();
     error ValueHigherThanThreshold();
     error NotUpToThreshold();
+    error JudgeTreasuryNotSet();
 
     constructor(address _judgeTokenAddress) validAddress(_judgeTokenAddress) {
         require(_judgeTokenAddress.code.length > 0, EOANotAllowed());
@@ -86,11 +88,11 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
 
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
 
-        emit JudgeTreasuryAdressUpdated(_judgeTreasuryAddress);
+        emit JudgeTreasuryAddressUpdated(_judgeTreasuryAddress);
     }
 
     function updateFeePercent(uint8 _newFeePercent) external onlyRole(REWARDS_MANAGER_ADMIN_ROLE) {
-        require(_newFeePercent < FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
+        require(_newFeePercent <= FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
         uint8 oldFeePercent = feePercent;
         feePercent = _newFeePercent;
         emit FeePercentUpdated(oldFeePercent, _newFeePercent);
@@ -110,6 +112,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         external
         onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER)
     {
+        require(address(judgeTreasury) != address(0), JudgeTreasuryNotSet());
         rewardsManagerPreciseBalance += _amount;
     }
 
@@ -117,6 +120,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         external
         onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER)
     {
+         require(address(judgeTreasury) != address(0), JudgeTreasuryNotSet());
         rewardsManagerBonusBalance += _amount;
     }
 
@@ -129,7 +133,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     {
         require(_amount <= rewardsManagerPreciseBalance, InsufficientBalance());
         judgeToken.safeTransfer(_addr, _amount);
-        totalRewardsPaid += _amount;
+        totalBaseRewardsPaid += _amount;
         rewardsManagerPreciseBalance -= _amount;
     }
 
@@ -141,7 +145,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     {
         require(_amount <= rewardsManagerBonusBalance, InsufficientBalance());
         judgeToken.safeTransfer(_addr, _amount);
-        totalRewardsPaid += _amount;
+        totalBonusRewardsPaid += _amount;
         rewardsManagerBonusBalance -= _amount;
     }
 
@@ -153,11 +157,17 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         onlyRole(FUND_MANAGER_ROLE)
         nonReentrant
     {
-        require(_amount <= rewardsManagerPreciseBalance, InsufficientBalance());
+        uint256 totalAvailable = rewardsManagerPreciseBalance + rewardsManagerBonusBalance;
+        require(_amount <= totalAvailable, InsufficientBalance());
         judgeToken.safeTransfer(_to, _amount);
-        rewardsManagerPreciseBalance -= _amount;
-
-        emit AdminWithdrawed(msg.sender, _to, _amount);
+        if(_amount <= rewardsManagerPreciseBalance){
+            rewardsManagerPreciseBalance = rewardsManagerPreciseBalance > _amount ? rewardsManagerPreciseBalance - _amount : 0;
+        }else{
+            uint256 remaining = _amount - rewardsManagerPreciseBalance;
+            rewardsManagerPreciseBalance = 0;
+            rewardsManagerBonusBalance -= remaining;
+        }
+        emit AdminWithdrawn(msg.sender, _to, _amount);
     }
 
     //Sensitive function to pull out all balances from rewardsManager
@@ -168,12 +178,22 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         onlyRole(FUND_MANAGER_ROLE)
         nonReentrant
     {
-        require(judgeToken.balanceOf(address(this)) > 0, InsufficientContractBalance());
-        judgeToken.safeTransfer(_to, judgeToken.balanceOf(address(this)));
+        uint256 balance = judgeToken.balanceOf(address(this));
+        require(balance > 0, InsufficientContractBalance());
+        judgeToken.safeTransfer(_to, balance);
         rewardsManagerPreciseBalance = 0;
         rewardsManagerBonusBalance = 0;
 
-        emit EmergencyWithdrawal(msg.sender, _to, judgeToken.balanceOf(address(this)));
+        emit EmergencyWithdrawal(msg.sender, _to, balance);
+    }
+
+    function totalRewardsPaid() external view returns(uint256 base, uint256 bonus, uint256 total){
+        total = totalBaseRewardsPaid + totalBonusRewardsPaid;
+        return (totalBaseRewardsPaid, totalBonusRewardsPaid, total);
+    }
+
+    function availableRewards() external view returns(uint256 base, uint256 bonus){
+       return (rewardsManagerPreciseBalance, rewardsManagerBonusBalance);
     }
 
     function calculateMisplacedJudge() public view returns (uint256) {
@@ -193,6 +213,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         onlyRole(TOKEN_RECOVERY_ROLE)
         nonReentrant
     {
+        require(address(judgeTreasury) != address(0), JudgeTreasuryNotSet());
         uint256 misplacedJudgeAmount = calculateMisplacedJudge();
         require(_amount <= misplacedJudgeAmount, InvalidAmount());
         require(_amount >= judgeRecoveryMinimumThreshold, NotUpToThreshold());
