@@ -132,9 +132,9 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         nonReentrant
     {
         require(_amount <= rewardsManagerPreciseBalance, InsufficientBalance());
-        judgeToken.safeTransfer(_addr, _amount);
         totalBaseRewardsPaid += _amount;
         rewardsManagerPreciseBalance -= _amount;
+        judgeToken.safeTransfer(_addr, _amount);
     }
 
     function sendBonus(address _addr, uint256 _amount)
@@ -144,9 +144,9 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         nonReentrant
     {
         require(_amount <= rewardsManagerBonusBalance, InsufficientBalance());
-        judgeToken.safeTransfer(_addr, _amount);
         totalBonusRewardsPaid += _amount;
         rewardsManagerBonusBalance -= _amount;
+        judgeToken.safeTransfer(_addr, _amount);
     }
 
     function adminWithdrawal(address _to, uint256 _amount)
@@ -159,7 +159,6 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     {
         uint256 totalAvailable = rewardsManagerPreciseBalance + rewardsManagerBonusBalance;
         require(_amount <= totalAvailable, InsufficientBalance());
-        judgeToken.safeTransfer(_to, _amount);
         if(_amount <= rewardsManagerPreciseBalance){
             rewardsManagerPreciseBalance = rewardsManagerPreciseBalance > _amount ? rewardsManagerPreciseBalance - _amount : 0;
         }else{
@@ -167,6 +166,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
             rewardsManagerPreciseBalance = 0;
             rewardsManagerBonusBalance -= remaining;
         }
+        judgeToken.safeTransfer(_to, _amount);
         emit AdminWithdrawn(msg.sender, _to, _amount);
     }
 
@@ -180,10 +180,9 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     {
         uint256 balance = judgeToken.balanceOf(address(this));
         require(balance > 0, InsufficientContractBalance());
-        judgeToken.safeTransfer(_to, balance);
         rewardsManagerPreciseBalance = 0;
         rewardsManagerBonusBalance = 0;
-
+        judgeToken.safeTransfer(_to, balance);
         emit EmergencyWithdrawal(msg.sender, _to, balance);
     }
 
@@ -220,8 +219,8 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         uint256 refund = Math.mulDiv(_amount, (100 - uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
         if(fee > 0){
-        judgeToken.safeTransfer(address(judgeTreasury), fee);
         judgeTreasury.increaseTreasuryPreciseBalance(fee);
+        judgeToken.safeTransfer(address(judgeTreasury), fee);
         }
         judgeToken.safeTransfer(_to, refund);
         emit JudgeTokenRecovered(_to, refund, fee);

@@ -365,15 +365,15 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 pendingBonus = accumulatedStakeBonusRewards(_index) - stake.bonusRewardDebt;
 
         if (pending > 0) {
-            rewardsManager.sendRewards(msg.sender, pending);
             totalClaimedBaseRewards += pending;
             stake.rewardDebt = accumulatedStakeRewards(_index);
+            rewardsManager.sendRewards(msg.sender, pending);
         }
 
         if (pendingBonus > 0) {
-            rewardsManager.sendBonus(msg.sender, pendingBonus);
             totalClaimedBonusRewards += pendingBonus;
             stake.bonusRewardDebt = accumulatedStakeBonusRewards(_index);
+            rewardsManager.sendBonus(msg.sender, pendingBonus);
         }
 
         emit ClaimedReward(msg.sender, pending + pendingBonus);
@@ -391,16 +391,14 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 pendingBonus = accumulatedStakeBonusRewards(_index) - stake.bonusRewardDebt;
 
         if (pending > 0) {
-            rewardsManager.sendRewards(msg.sender, pending);
             totalClaimedBaseRewards += pending;
+            rewardsManager.sendRewards(msg.sender, pending);
         }
 
         if (pendingBonus > 0) {
-            rewardsManager.sendBonus(msg.sender, pendingBonus);
             totalClaimedBonusRewards += pendingBonus;
+            rewardsManager.sendBonus(msg.sender, pendingBonus);
         }
-
-        judgeToken.safeTransfer(msg.sender, _amount);
 
         uint256 oldStakeWeight = stake.stakeWeight;
         stake.amountStaked -= _amount;
@@ -417,6 +415,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         stake.bonusRewardDebt = accumulatedStakeBonusRewards(_index);
         }
         totalStaked -= _amount;
+        judgeToken.safeTransfer(msg.sender, _amount);
         emit Withdrawn(msg.sender, _amount, pending + pendingBonus);
     }
 
@@ -433,15 +432,14 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 amountWithdrawn = stake.amountStaked;
 
         if (pending > 0) {
-            rewardsManager.sendRewards(msg.sender, pending);
             totalClaimedBaseRewards += pending;
+            rewardsManager.sendRewards(msg.sender, pending);
         }
 
         if (pendingBonus > 0) {
-            rewardsManager.sendBonus(msg.sender, pendingBonus);
             totalClaimedBonusRewards += pendingBonus;
+            rewardsManager.sendBonus(msg.sender, pendingBonus);
         }
-        judgeToken.safeTransfer(msg.sender, amountWithdrawn);
 
         totalStakeWeight -= stake.stakeWeight;
         stake.amountStaked = 0;
@@ -449,6 +447,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         totalStaked -= amountWithdrawn;
         stake.rewardDebt = 0;
         stake.bonusRewardDebt = 0;
+
+        judgeToken.safeTransfer(msg.sender, amountWithdrawn);
         emit Withdrawn(msg.sender, amountWithdrawn, pending + pendingBonus);
     }
 
@@ -474,21 +474,20 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         );
         uint256 netAmount = _amount - penalty;
 
-        judgeToken.safeTransfer(address(judgeTreasury), penalty);
         totalPenalties += penalty;
         judgeTreasury.increaseTreasuryPreciseBalance(penalty);
+        judgeToken.safeTransfer(address(judgeTreasury), penalty);
 
         if (pending > 0) {
-            rewardsManager.sendRewards(msg.sender, pending);
             totalClaimedBaseRewards += pending;
+            rewardsManager.sendRewards(msg.sender, pending);
         }
 
         if (pendingBonus > 0) {
-            rewardsManager.sendBonus(msg.sender, pendingBonus);
             totalClaimedBonusRewards += pendingBonus;
+            rewardsManager.sendBonus(msg.sender, pendingBonus);
         }
 
-        judgeToken.safeTransfer(msg.sender, netAmount);
         stake.amountStaked -= _amount;
 
         if (stake.amountStaked == 0) {
@@ -503,6 +502,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         totalStakeWeight = totalStakeWeight - oldStakeWeight + stake.stakeWeight;
         totalStaked -= _amount;
+        judgeToken.safeTransfer(msg.sender, netAmount);
         emit Withdrawn(msg.sender, netAmount, pending + pendingBonus);
         emit EarlyWithdrawalPenalized(msg.sender, block.number, penalty);
     }
@@ -640,12 +640,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 refund = Math.mulDiv(_amount, (100 - uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
 
-        judgeToken.safeTransfer(_to, refund);
-
         if(fee > 0){
-        judgeToken.safeTransfer(address(judgeTreasury), fee);
         judgeTreasury.increaseTreasuryPreciseBalance(fee);
+        judgeToken.safeTransfer(address(judgeTreasury), fee);
         }
+
+        judgeToken.safeTransfer(_to, refund);
 
         emit JudgeTokenRecovered(_to, refund, fee);
     }
@@ -663,11 +663,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         uint256 refund = Math.mulDiv(_amount, (100 - uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
-        IERC20(_strandedTokenAddr).safeTransfer(_addr, refund);
 
         if(fee > 0){
         feeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
         }
+
+        IERC20(_strandedTokenAddr).safeTransfer(_addr, refund);
         emit Erc20Recovered(_strandedTokenAddr, _addr, refund, fee);
     }
 
@@ -681,8 +682,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         require(_strandedTokenAddr != address(0) && _to != address(0), InvalidAddress());
         require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
         require(_amount <= feeBalanceOfStrandedToken[_strandedTokenAddr], InsufficientBalance());
-        IERC20(_strandedTokenAddr).safeTransfer(_to, _amount);
         feeBalanceOfStrandedToken[_strandedTokenAddr] -= _amount;
+        IERC20(_strandedTokenAddr).safeTransfer(_to, _amount);
         emit FeesFromOtherTokensTransferred(
             _strandedTokenAddr, _to, _amount, feeBalanceOfStrandedToken[_strandedTokenAddr]
         );
