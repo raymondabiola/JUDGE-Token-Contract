@@ -625,7 +625,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return misplacedJudgeAmount;
     }
 
-    function recoverMisplacedJudgeToken(address _to, uint256 _amount)
+    function recoverMisplacedJudge(address _to, uint256 _amount)
         external
         validAddress(_to)
         validAmount(_amount)
@@ -641,8 +641,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 fee = _amount - refund;
 
         if(fee > 0){
-        judgeTreasury.increaseTreasuryPreciseBalance(fee);
         judgeToken.safeTransfer(address(judgeTreasury), fee);
+        judgeTreasury.increaseTreasuryPreciseBalance(fee);
         }
 
         judgeToken.safeTransfer(_to, refund);

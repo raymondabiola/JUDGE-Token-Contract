@@ -160,11 +160,11 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         uint256 totalAvailable = rewardsManagerPreciseBalance + rewardsManagerBonusBalance;
         require(_amount <= totalAvailable, InsufficientBalance());
         if(_amount <= rewardsManagerPreciseBalance){
-            rewardsManagerPreciseBalance = rewardsManagerPreciseBalance > _amount ? rewardsManagerPreciseBalance - _amount : 0;
+            rewardsManagerPreciseBalance -= _amount;
         }else{
-            uint256 remaining = _amount - rewardsManagerPreciseBalance;
+            uint256 remainder = _amount - rewardsManagerPreciseBalance;
             rewardsManagerPreciseBalance = 0;
-            rewardsManagerBonusBalance -= remaining;
+            rewardsManagerBonusBalance -= remainder;
         }
         judgeToken.safeTransfer(_to, _amount);
         emit AdminWithdrawn(msg.sender, _to, _amount);
@@ -180,9 +180,9 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     {
         uint256 balance = judgeToken.balanceOf(address(this));
         require(balance > 0, InsufficientContractBalance());
+        judgeToken.safeTransfer(_to, balance);
         rewardsManagerPreciseBalance = 0;
         rewardsManagerBonusBalance = 0;
-        judgeToken.safeTransfer(_to, balance);
         emit EmergencyWithdrawal(msg.sender, _to, balance);
     }
 
@@ -219,8 +219,8 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         uint256 refund = Math.mulDiv(_amount, (100 - uint256(feePercent)), 100);
         uint256 fee = _amount - refund;
         if(fee > 0){
-        judgeTreasury.increaseTreasuryPreciseBalance(fee);
         judgeToken.safeTransfer(address(judgeTreasury), fee);
+        judgeTreasury.increaseTreasuryPreciseBalance(fee);
         }
         judgeToken.safeTransfer(_to, refund);
         emit JudgeTokenRecovered(_to, refund, fee);
