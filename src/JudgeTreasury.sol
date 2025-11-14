@@ -146,7 +146,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     }
 
     function updateFeePercent(uint8 _newFeePercent) external onlyRole(TREASURY_ADMIN_ROLE) {
-        require(_newFeePercent < FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
+        require(_newFeePercent <= FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
         uint8 oldFeePercent = feePercent;
         feePercent = _newFeePercent;
         emit FeePercentUpdated(oldFeePercent, _newFeePercent);
@@ -248,9 +248,9 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         nonReentrant
     {
         require(_amount <= treasuryPreciseBalance, InsufficientBalance());
-        judgeToken.safeTransfer(_addr, _amount);
 
         treasuryPreciseBalance -= _amount;
+        judgeToken.safeTransfer(_addr, _amount);
 
         emit TransferredFromTreasury(_addr, _amount);
     }

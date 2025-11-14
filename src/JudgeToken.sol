@@ -10,7 +10,8 @@ import {ERC20Votes} from "../lib/openzeppelin-contracts/contracts/token/ERC20/ex
 import {Nonces} from "../lib/openzeppelin-contracts/contracts/utils/Nonces.sol";
 
 contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessControl, ERC20Capped {
-    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE"); //Grant role to JudgeTreasury contract during deployment
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE"); 
+    bytes32 public constant ALLOCATION_MINTER_ROLE = keccak256("ALLOCATION_MINTER_ROLE"); //Grant role to JudgeTreasury contract during deployment
     uint256 public immutable MAX_STAKING_REWARD_ALLOCATION = 50_000_000 * 10 ** decimals();
     uint256 public immutable MAX_TEAM_ALLOCATION = 50_000_000 * 10 ** decimals();
     uint256 public mintableJudgeAmount;
@@ -45,8 +46,8 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
         emit Minted(msg.sender, to, amount);
     }
 
-    // Grant the minter role to judgeTreasury
-    function mintFromAllocation(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
+    // Grant the allocation_minter role to judgeTreasury
+    function mintFromAllocation(address to, uint256 amount) external onlyRole(ALLOCATION_MINTER_ROLE) {
         _mint(to, amount);
         emit Minted(msg.sender, to, amount);
     }
