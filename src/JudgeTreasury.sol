@@ -178,14 +178,14 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
             CurrentQuarterAllocationNotYetFunded()
         );
         require(_bonus >= _durationInBlocks, BonusTooSmall());
-        require(block.number > bonusEndBlock[quarterIndex-1], lastBonusStillRunning());
+        require(block.number > bonusEndBlock[currentQuarterIndex], lastBonusStillRunning());
 
         additionalQuarterRewards[currentQuarterIndex] += _bonus;
         judgeToken.safeTransferFrom(msg.sender, address(rewardsManager), _bonus);
         rewardsManager.increaseRewardsManagerBonusBalance(_bonus);
         judgeStaking.updatePool();
         judgeStaking.syncQuarterBonusRewardsPerBlock(currentQuarterIndex, _bonus, _durationInBlocks);
-        bonusEndBlock[quarterIndex-1] = block.number + _durationInBlocks;
+        bonusEndBlock[currentQuarterIndex] = block.number + _durationInBlocks;
     }
 
     // Assign the treasury precise balance updater role to JudgeStaking contract and Rewards Manager Contract
@@ -257,11 +257,12 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     function calculateMisplacedJudge() public view returns (uint256) {
         uint256 contractBalance = judgeToken.balanceOf(address(this));
-        uint256 misplacedJudgeAmount = 0;
         if (contractBalance > treasuryPreciseBalance){
-        misplacedJudgeAmount = judgeToken.balanceOf(address(this)) - treasuryPreciseBalance;
+            unchecked {
+                return contractBalance - treasuryPreciseBalance
+                }
         }
-        return misplacedJudgeAmount;
+        return 0;
     }
 
     function recoverMisplacedJudge(address _to, uint256 _amount)
