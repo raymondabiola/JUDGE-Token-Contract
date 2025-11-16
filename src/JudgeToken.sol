@@ -14,7 +14,7 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
     bytes32 public constant ALLOCATION_MINTER_ROLE = keccak256("ALLOCATION_MINTER_ROLE"); //Grant role to JudgeTreasury contract during deployment
     uint256 public immutable MAX_STAKING_REWARD_ALLOCATION = 50_000_000 * 10 ** decimals();
     uint256 public immutable MAX_TEAM_ALLOCATION = 50_000_000 * 10 ** decimals();
-    uint256 public mintableJudgeAmount;
+    uint256 public mintableUnallocatedJudge;
 
     event Minted(address indexed caller, address indexed to, uint256 amount);
 
@@ -31,17 +31,17 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
         _grantRole(MINTER_ROLE, msg.sender);
         _mint(msg.sender, initialSupply);
 
-        mintableJudgeAmount = cap() - MAX_STAKING_REWARD_ALLOCATION - MAX_TEAM_ALLOCATION - initialSupply;
+        mintableUnallocatedJudge = cap() - MAX_STAKING_REWARD_ALLOCATION - MAX_TEAM_ALLOCATION - initialSupply;
         emit Minted(msg.sender, msg.sender, initialSupply);
     }
 
-    function decreaseMintableAmount(uint256 amount) internal {
-        require(amount <= mintableJudgeAmount, AmountExceedsMintable());
-        mintableJudgeAmount -= amount;
+    function decreaseMintableUnallocatedJudge(uint256 amount) internal {
+        require(amount <= mintableUnallocatedJudge, AmountExceedsMintable());
+        mintableUnallocatedJudge -= amount;
     }
 
     function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
-        decreaseMintableAmount(amount);
+        decreaseMintableUnallocatedJudge(amount);
         _mint(to, amount);
         emit Minted(msg.sender, to, amount);
     }
