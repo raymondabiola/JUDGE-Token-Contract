@@ -117,7 +117,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         _;
     }
 
-    modifier notEOA(address _addr) {
+    modifier notEoa(address _addr) {
         require(_addr.code.length > 0, EOANotAllowed());
         _;
     }
@@ -127,7 +127,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         onlyRole(TREASURY_ADMIN_ROLE)
         validAddress(newRewardsManagerAddress)
         notSelf(newRewardsManagerAddress)
-        notEOA(newRewardsManagerAddress)
+        notEoa(newRewardsManagerAddress)
     {
         rewardsManager = RewardsManager(newRewardsManagerAddress);
         emit RewardsManagerAddressUpdated(newRewardsManagerAddress);
@@ -138,7 +138,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         onlyRole(TREASURY_ADMIN_ROLE)
         validAddress(newJudgeStakingAddress)
         notSelf(newJudgeStakingAddress)
-        notEOA(newJudgeStakingAddress)
+        notEoa(newJudgeStakingAddress)
     {
         judgeStaking = JudgeStaking(newJudgeStakingAddress);
 
@@ -257,11 +257,11 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     }
 
     function remainingStakingAllocation()public view returns(uint256){
-        return judgeToken.MAX_STAKING_REWARD_ALLOCATION > stakingRewardsFundsFromTreasury ? judgeToken.MAX_STAKING_REWARD_ALLOCATION - stakingRewardsFundsFromTreasury : 0;
+        return judgeToken.MAX_STAKING_REWARD_ALLOCATION() > stakingRewardsFundsFromTreasury ? judgeToken.MAX_STAKING_REWARD_ALLOCATION() - stakingRewardsFundsFromTreasury : 0;
     }
 
     function remainingTeamAllocation()public view returns(uint256){
-        return judgeToken.MAX_TEAM_ALLOCATION > teamFundingReceived ? judgeToken.MAX_TEAM_ALLOCATION - teamFundingReceived : 0;
+        return judgeToken.MAX_TEAM_ALLOCATION() > teamFundingReceived ? judgeToken.MAX_TEAM_ALLOCATION() - teamFundingReceived : 0;
     }
 
     function calculateMisplacedJudge() public view returns (uint256) {

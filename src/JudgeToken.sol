@@ -12,8 +12,8 @@ import {Nonces} from "../lib/openzeppelin-contracts/contracts/utils/Nonces.sol";
 contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessControl, ERC20Capped {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE"); 
     bytes32 public constant ALLOCATION_MINTER_ROLE = keccak256("ALLOCATION_MINTER_ROLE"); //Grant role to JudgeTreasury contract during deployment
-    uint256 public immutable MAX_STAKING_REWARD_ALLOCATION = 50_000_000 * 10 ** decimals();
-    uint256 public immutable MAX_TEAM_ALLOCATION = 50_000_000 * 10 ** decimals();
+    uint256 public immutable MAX_STAKING_REWARD_ALLOCATION = 50_000_000 * 10 ** 18;
+    uint256 public immutable MAX_TEAM_ALLOCATION = 50_000_000 * 10 ** 18;
     uint256 public mintableUnallocatedJudge;
 
     event Minted(address indexed caller, address indexed to, uint256 amount);

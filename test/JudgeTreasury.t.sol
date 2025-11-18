@@ -7,14 +7,14 @@ import "../src/JudgeToken.sol";
 import "../src/JudgeTreasury.sol";
 import "../src/RewardsManager.sol";
 import "../src/JudgeStaking.sol";
-import "../src/SampleERC20.sol";
+import "../src/SampleErc20.sol";
 
 contract JudgeTreasuryTest is Test {
     JudgeToken public judgeToken;
     JudgeTreasury public judgeTreasury;
     RewardsManager public rewardsManager;
     JudgeStaking public judgeStaking;
-    SampleERC20 public sampleERC20;
+    SampleErc20 public sampleErc20;
     address public owner;
     address public user1;
     address public user2;
@@ -67,7 +67,7 @@ contract JudgeTreasuryTest is Test {
         judgeStaking.setRewardsManagerAddress(address(rewardsManager));
         judgeStaking.setJudgeTreasuryAddress(address(judgeTreasury));
 
-        sampleERC20 = new SampleERC20();
+        sampleErc20 = new SampleErc20();
     }
 
     function testDecimals() public {
@@ -218,7 +218,7 @@ contract JudgeTreasuryTest is Test {
 
     function testFundRewardsManager() public {
         uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
-        uint256 MAX_ALLOCATION = judgeToken.MAX_STAKING_REWARD_ALLOCATION();
+        uint256 maxAllocation = judgeToken.MAX_STAKING_REWARD_ALLOCATION();
         uint256 stakingRewardsFundFromTreasury1 = 49_000_001 * 10 ** uint256(decimals);
         uint256 stakingRewardsFundFromTreasury2 = 40_000_000 * 10 ** uint256(decimals);
         bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
@@ -230,7 +230,7 @@ contract JudgeTreasuryTest is Test {
 
         judgeTreasury.grantRole(fundManager, owner);
 
-        vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(MAX_ALLOCATION));
+        vm.store(address(judgeTreasury), bytes32(uint256(5)), bytes32(maxAllocation));
         vm.expectRevert(TotalStakingRewardAllocationExceeded.selector);
         judgeTreasury.fundRewardsManager(index);
 
@@ -268,7 +268,7 @@ contract JudgeTreasuryTest is Test {
         bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
         uint256 amount = 2_000_000 * 10 ** uint256(decimals);
         uint256 invalidAmount;
-        uint256 MAX_ALLOCATION = judgeToken.MAX_TEAM_ALLOCATION();
+        uint256 maxAllocation = judgeToken.MAX_TEAM_ALLOCATION();
         uint256 assumedTeamFundReceived = 49_000_000 * 10 ** uint256(decimals);
 
         vm.expectRevert(abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector, owner, fundManager));
@@ -284,7 +284,7 @@ contract JudgeTreasuryTest is Test {
         judgeTreasury.fundTeamDevelopment(owner, amount);
         assertEq(judgeToken.balanceOf(owner), amount + initialSupply);
 
-        vm.store(address(judgeTreasury), bytes32(uint256(6)), bytes32(MAX_ALLOCATION));
+        vm.store(address(judgeTreasury), bytes32(uint256(6)), bytes32(maxAllocation));
         vm.expectRevert(TeamDevelopmentAllocationExceeded.selector);
         judgeTreasury.fundTeamDevelopment(owner, amount);
 
@@ -379,16 +379,16 @@ contract JudgeTreasuryTest is Test {
 
     function testRecoverErc20() public {
         bytes32 tokenRecoveryAdmin = judgeTreasury.TOKEN_RECOVERY_ROLE();
-        address strandedTokenAddr = address(sampleERC20);
+        address strandedTokenAddr = address(sampleErc20);
         uint256 misplacedAmount = 1000 ether;
         uint256 tooHighAmount = 1001 ether;
         uint256 invalidAmount;
-        sampleERC20.mint(user1, misplacedAmount);
+        sampleErc20.mint(user1, misplacedAmount);
 
         vm.prank(user1);
 
-        sampleERC20.transfer(address(judgeTreasury), misplacedAmount);
-        assertEq(sampleERC20.balanceOf(address(judgeTreasury)), misplacedAmount);
+        sampleErc20.transfer(address(judgeTreasury), misplacedAmount);
+        assertEq(sampleErc20.balanceOf(address(judgeTreasury)), misplacedAmount);
 
         vm.expectRevert(abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector, owner, tokenRecoveryAdmin));
         judgeTreasury.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
@@ -417,20 +417,20 @@ contract JudgeTreasuryTest is Test {
         judgeTreasury.recoverErc20(address(judgeToken), user1, misplacedAmount);
 
         judgeTreasury.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
-        assertEq(sampleERC20.balanceOf(user1), misplacedAmount * 9 / 10);
+        assertEq(sampleErc20.balanceOf(user1), misplacedAmount * 9 / 10);
         assertEq(judgeTreasury.feeBalanceOfStrandedToken(strandedTokenAddr), misplacedAmount * 1 / 10);
     }
 
     function testTransferFeesFromOtherTokensOutOfTreasury() public {
         bytes32 tokenRecoveryAdmin = judgeTreasury.TOKEN_RECOVERY_ROLE();
         bytes32 fundManagerRole = judgeTreasury.FUND_MANAGER_ROLE();
-        address strandedTokenAddr = address(sampleERC20);
+        address strandedTokenAddr = address(sampleErc20);
         uint256 misplacedAmount = 1000 ether;
         uint256 invalidAmount;
-        sampleERC20.mint(user1, misplacedAmount);
+        sampleErc20.mint(user1, misplacedAmount);
 
         vm.prank(user1);
-        sampleERC20.transfer(address(judgeTreasury), misplacedAmount);
+        sampleErc20.transfer(address(judgeTreasury), misplacedAmount);
 
         judgeTreasury.grantRole(tokenRecoveryAdmin, owner);
         judgeTreasury.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
@@ -464,7 +464,7 @@ contract JudgeTreasuryTest is Test {
         judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(address(judgeToken), user2, misplacedAmount / 10);
 
         judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(strandedTokenAddr, user2, misplacedAmount / 10);
-        assertEq(sampleERC20.balanceOf(user2), misplacedAmount / 10);
+        assertEq(sampleErc20.balanceOf(user2), misplacedAmount / 10);
         assertEq(judgeTreasury.feeBalanceOfStrandedToken(strandedTokenAddr), 0);
     }
 }

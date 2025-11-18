@@ -55,9 +55,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint256 public totalAccruedBonusRewards; 
 
     address[] internal users;
-    mapping(address => userStake[]) internal userStakes; 
+    mapping(address => UserStake[]) internal userStakes; 
     mapping(address => bool) internal isUser; 
-    struct userStake {
+    struct UserStake {
         uint64 id;
         uint256 amountStaked;
         uint32 lockUpPeriod;
@@ -145,7 +145,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         _;
     }
 
-    modifier notEOA(address _addr) {
+    modifier notEoa(address _addr) {
         require(_addr.code.length > 0, EOANotAllowed());
         _;
     }
@@ -156,7 +156,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         onlyRole(STAKING_ADMIN_ROLE)
         validAddress(_rewardsManagerAddress)
         notSelf(_rewardsManagerAddress)
-        notEOA(_rewardsManagerAddress)
+        notEoa(_rewardsManagerAddress)
     {
         rewardsManager = IRewardsManager(_rewardsManagerAddress);
         emit RewardsManagerAddressUpdated(_rewardsManagerAddress);
@@ -167,7 +167,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         onlyRole(STAKING_ADMIN_ROLE)
         validAddress(_judgeTreasuryAddress)
         notSelf(_judgeTreasuryAddress)
-        notEOA(_judgeTreasuryAddress)
+        notEoa(_judgeTreasuryAddress)
     {
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
         _grantRole(REWARDS_PER_BLOCK_CALCULATOR, _judgeTreasuryAddress);
@@ -209,7 +209,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return uint32(blockNumber > stakingPoolStartBlock ? ((blockNumber - stakingPoolStartBlock) / QUARTER_BLOCKS) +1 : 1);
     }
 
-    function getCurrentAPR() public view returns (uint256) {
+    function getCurrentApr() public view returns (uint256) {
         uint32 currentQuarterIndex = getCurrentQuarterIndex();
         if (totalStakeWeight == 0) {
             return 0;
@@ -297,13 +297,13 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     function accumulatedStakeRewards(uint16 _index) internal view returns (uint256) {
-        userStake storage stake = userStakes[msg.sender][_index];
+        UserStake storage stake = userStakes[msg.sender][_index];
         uint256 accRewards = Math.mulDiv(stake.stakeWeight, accJudgePerShare, SCALE);
         return accRewards;
     }
 
     function accumulatedStakeBonusRewards(uint16 _index) internal view returns (uint256) {
-        userStake storage stake = userStakes[msg.sender][_index];
+        UserStake storage stake = userStakes[msg.sender][_index];
         uint256 accBonusRewards = Math.mulDiv(stake.stakeWeight, accBonusJudgePerShare, SCALE);
         return accBonusRewards;
     }
@@ -330,7 +330,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 rewardDebt = Math.mulDiv(stakeWeight, accJudgePerShare, SCALE);
         uint256 bonusRewardDebt = Math.mulDiv(stakeWeight, accBonusJudgePerShare, SCALE);
 
-        userStake memory newStake = userStake({
+        UserStake memory newStake = UserStake({
             id: newStakeId,
             amountStaked: amountStaked,
             lockUpPeriod: lockUpPeriod,
@@ -356,7 +356,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     function claimRewards(uint16 _index) external validIndex(_index) nonReentrant {
         require(address(rewardsManager) != address(0), RewardsManagerNotSet());
-        userStake storage stake = userStakes[msg.sender][_index];
+        UserStake storage stake = userStakes[msg.sender][_index];
         require(stake.amountStaked > 0, ZeroStakeBalance());
         updatePool();
         require(isPoolUpToDate(), PoolNotUpToDate());
@@ -381,7 +381,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     function withdraw(uint256 _amount, uint16 _index) external validAmount(_amount) validIndex(_index) nonReentrant {
         require(address(rewardsManager) != address(0), RewardsManagerNotSet());
-        userStake storage stake = userStakes[msg.sender][_index];
+        UserStake storage stake = userStakes[msg.sender][_index];
         require(block.number >= stake.maturityBlockNumber, NotYetMatured());
         require(_amount <= stake.amountStaked, InsufficientBalance());
         updatePool();
@@ -421,7 +421,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     function withdrawAll(uint16 _index) external validIndex(_index) nonReentrant {
         require(address(rewardsManager) != address(0), RewardsManagerNotSet());
-        userStake storage stake = userStakes[msg.sender][_index];
+        UserStake storage stake = userStakes[msg.sender][_index];
         require(block.number >= stake.maturityBlockNumber, NotYetMatured());
         updatePool();
         require(isPoolUpToDate(), PoolNotUpToDate());
@@ -459,7 +459,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         nonReentrant
     {
         require(address(rewardsManager) != address(0), RewardsManagerNotSet());
-        userStake storage stake = userStakes[msg.sender][_index];
+        UserStake storage stake = userStakes[msg.sender][_index];
         require(block.number < stake.maturityBlockNumber, AlreadyMatured());
         require(_amount <= stake.amountStaked, InsufficientBalance());
         updatePool();
@@ -515,16 +515,16 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     // == USER VIEW FUNCTIONS ==
-    function viewMyStakes() external view returns (userStake[] memory) {
+    function viewMyStakes() external view returns (UserStake[] memory) {
         return userStakes[msg.sender];
     }
 
-    function viewMyStakeAtIndex(uint16 _index) external view validIndex(_index) returns (userStake memory) {
+    function viewMyStakeAtIndex(uint16 _index) external view validIndex(_index) returns (UserStake memory) {
         return userStakes[msg.sender][_index];
     }
 
     function viewMyPendingRewards(uint16 _index) external view validIndex(_index) returns (uint256) {
-        userStake memory stake = userStakes[msg.sender][_index];
+        UserStake memory stake = userStakes[msg.sender][_index];
         uint256 tempAccJudgePerShare = accJudgePerShare;
         uint256 tempAccBonusJudgePerShare = accBonusJudgePerShare;
 
@@ -599,7 +599,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         view
         validAddress(addr)
         onlyRole(STAKING_ADMIN_ROLE)
-        returns (userStake[] memory)
+        returns (UserStake[] memory)
     {
         return userStakes[addr];
     }
@@ -609,7 +609,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         view
         validAddress(addr)
         onlyRole(STAKING_ADMIN_ROLE)
-        returns (userStake memory)
+        returns (UserStake memory)
     {
         require(_index < userStakes[addr].length, InvalidIndex());
         return userStakes[addr][_index];

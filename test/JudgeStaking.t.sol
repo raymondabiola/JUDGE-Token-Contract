@@ -8,14 +8,14 @@ import "../src/JudgeStaking.sol";
 import "../src/RewardsManager.sol";
 import "../src/JudgeTreasury.sol";
 import {Math} from "../lib/openzeppelin-contracts/contracts/utils/math/Math.sol";
-import "../src/SampleERC20.sol";
+import "../src/SampleErc20.sol";
 
 contract JudgeStakingTest is Test {
     JudgeToken public judgeToken;
     JudgeStaking public judgeStaking;
     RewardsManager public rewardsManager;
     JudgeTreasury public judgeTreasury;
-    SampleERC20 public sampleERC20;
+    SampleErc20 public sampleErc20;
 
     address public owner;
     address public zeroAddress;
@@ -45,7 +45,7 @@ contract JudgeStakingTest is Test {
     error AlreadyMatured();
     error AlreadyTriggered();
 
-    struct userStake {
+    struct UserStake {
         uint64 id;
         uint256 amountStaked;
         uint32 lockUpPeriod;
@@ -73,7 +73,7 @@ contract JudgeStakingTest is Test {
         judgeStaking = new JudgeStaking(address(judgeToken), earlyWithdrawalPercent);
         rewardsManager = new RewardsManager(address(judgeToken));
         judgeTreasury = new JudgeTreasury(address(judgeToken), address(rewardsManager), address(judgeStaking));
-        sampleERC20 = new SampleERC20();
+        sampleErc20 = new SampleErc20();
 
         bytes32 minterRole = judgeToken.MINTER_ROLE();
         bytes32 rewardsManagerPreciseBalanceUpdater = rewardsManager.REWARDS_MANAGER_PRECISE_BALANCE_UPDATER();
@@ -231,7 +231,7 @@ contract JudgeStakingTest is Test {
         assertEq(judgeStaking.calculateCurrentRewardsPerBlock(), 0);
     }
 
-    function testGetCurrentAPR() public {
+    function testGetCurrentApr() public {
         bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
         bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
         bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
@@ -253,14 +253,14 @@ contract JudgeStakingTest is Test {
         uint256 blocksPerYear = 365 days / 12;
         uint256 apr1 = (rewardsPerBlock * blocksPerYear * 1e18) / judgeStaking.totalStakeWeight();
 
-        assertEq(judgeStaking.getCurrentAPR(), apr1);
+        assertEq(judgeStaking.getCurrentApr(), apr1);
 
         vm.roll(poolStartBlock + 255_000);
         judgeToken.approve(address(judgeTreasury), 40_000 * 10 ** uint256(decimals));
         judgeTreasury.addBonusToQuarterReward(additionalRewards, 100_000);
         uint256 bonusRewardsPerBlock = judgeStaking.bonusPerBlock();
         uint256 apr2 = (bonusRewardsPerBlock * blocksPerYear * 1e18) / judgeStaking.totalStakeWeight();
-        assertEq(judgeStaking.getCurrentAPR(), apr1 + apr2);
+        assertEq(judgeStaking.getCurrentApr(), apr1 + apr2);
     }
 
     function testUpdateFeePercent() public {
@@ -710,7 +710,7 @@ contract JudgeStakingTest is Test {
         assertApproxEqRel(totalAmountWithdrawn, 34848731500000000000000, 4e14);
         assertApproxEqAbs(totalAmountWithdrawn, 34848731500000000000000, 11e19);
 
-        JudgeStaking.userStake memory user1Stake = judgeStaking.viewUserStakeAtIndex(user1, 0);
+        JudgeStaking.UserStake memory user1Stake = judgeStaking.viewUserStakeAtIndex(user1, 0);
         assertEq(user1Stake.amountStaked, 10_000 * 10 ** uint256(decimals));
         assertEq(judgeStaking.totalStaked(), 110_000 * 10 ** uint256(decimals));
         assertApproxEqAbs(user1Stake.stakeWeight, user1Stake.amountStaked * 10 * 1e18 / 360 / 1e18, 10_000);
@@ -774,7 +774,7 @@ contract JudgeStakingTest is Test {
         assertApproxEqRel(totalAmountWithdrawn, 44848731500000000000000, 4e14);
         assertApproxEqAbs(totalAmountWithdrawn, 44848731500000000000000, 11e19);
 
-        JudgeStaking.userStake memory user1Stake = judgeStaking.viewUserStakeAtIndex(user1, 0);
+        JudgeStaking.UserStake memory user1Stake = judgeStaking.viewUserStakeAtIndex(user1, 0);
         assertEq(user1Stake.amountStaked, 0);
         assertEq(judgeStaking.totalStaked(), 100_000 * 10 ** uint256(decimals));
         assertEq(user1Stake.stakeWeight, 0);
@@ -853,13 +853,13 @@ contract JudgeStakingTest is Test {
         vm.roll(poolStartBlock + 80_000);
 
         uint256 totalStakeWeight = user1Stake1StakeWeight + user1Stake2StakeWeight + user2StakeWeight;
-        uint256 accJudgePerShareAFter80_000Blocks = Math.mulDiv(
+        uint256 accJudgePerShareAFter80000Blocks = Math.mulDiv(
             76_000, Math.mulDiv(1_000_000 * 10 ** uint256(decimals), 1e18, 648_000), totalStakeWeight
         ) + accJudgePerShareAFter4000Blocks;
-        uint256 accBonusJudgePerShareAfter80_000Blocks = Math.mulDiv(
+        uint256 accBonusJudgePerShareAfter80000Blocks = Math.mulDiv(
             76_000, Math.mulDiv(100_000 * 10 ** uint256(decimals), 1e18, 200_000), totalStakeWeight
         ) + accBonusJudgePerShareAfter4000Blocks;
-        console.log("accBonusJudgePerShareAfter80_000Blocks", accBonusJudgePerShareAfter80_000Blocks);
+        console.log("accBonusJudgePerShareAfter80000Blocks", accBonusJudgePerShareAfter80000Blocks);
         vm.expectRevert(InvalidAmount.selector);
         vm.prank(user2);
         judgeStaking.earlyWithdraw(0, 0);
@@ -881,9 +881,9 @@ contract JudgeStakingTest is Test {
 
         uint256 balanceOfUser2AfterWithdrawal = judgeToken.balanceOf(user2);
         uint256 totalAmountWithdrawn = balanceOfUser2AfterWithdrawal - balanceOfUser2AfterDeposit;
-        uint256 user2RewardsExpected = Math.mulDiv(user2StakeWeight, accJudgePerShareAFter80_000Blocks, 1e18)
+        uint256 user2RewardsExpected = Math.mulDiv(user2StakeWeight, accJudgePerShareAFter80000Blocks, 1e18)
             - Math.mulDiv(user2StakeWeight, accJudgePerShareAFter4000Blocks, 1e18);
-        uint256 user2BonusRewardsExpected = Math.mulDiv(user2StakeWeight, accBonusJudgePerShareAfter80_000Blocks, 1e18)
+        uint256 user2BonusRewardsExpected = Math.mulDiv(user2StakeWeight, accBonusJudgePerShareAfter80000Blocks, 1e18)
             - Math.mulDiv(user2StakeWeight, accBonusJudgePerShareAfter4000Blocks, 1e18);
         console.log("user2RewardsExpected", user2RewardsExpected);
         console.log("user2BonusRewardsExpected", user2BonusRewardsExpected);
@@ -957,7 +957,7 @@ contract JudgeStakingTest is Test {
         vm.startPrank(user1);
         judgeStaking.deposit(depositAmount2, lockUpPeriod2);
 
-        JudgeStaking.userStake[] memory myStakes = judgeStaking.viewMyStakes();
+        JudgeStaking.UserStake[] memory myStakes = judgeStaking.viewMyStakes();
         assertEq(myStakes.length, 2);
         assertEq(myStakes[0].id, 1);
         assertEq(myStakes[0].amountStaked, depositAmount);
@@ -1079,7 +1079,7 @@ contract JudgeStakingTest is Test {
         vm.expectRevert(InvalidAddress.selector);
         judgeStaking.viewUserStakes(zeroAddress);
 
-        JudgeStaking.userStake[] memory user1Stakes = judgeStaking.viewUserStakes(user1);
+        JudgeStaking.UserStake[] memory user1Stakes = judgeStaking.viewUserStakes(user1);
 
         assertEq(user1Stakes.length, 2);
         assertEq(user1Stakes[0].id, 1);
@@ -1261,19 +1261,19 @@ contract JudgeStakingTest is Test {
     function testRecoverErc20() public {
         bytes32 tokenRecoveryAdmin = judgeStaking.TOKEN_RECOVERY_ROLE();
         bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
-        address strandedTokenAddr = address(sampleERC20);
+        address strandedTokenAddr = address(sampleErc20);
         uint256 misplacedAmount = 1000 ether;
         uint256 tooHighAmount = 1001 ether;
         uint256 invalidAmount;
         uint8 feePercent = 10;
         judgeStaking.grantRole(stakingAdmin, owner);
         judgeStaking.updateFeePercent(feePercent);
-        sampleERC20.mint(user1, misplacedAmount);
+        sampleErc20.mint(user1, misplacedAmount);
 
         vm.prank(user1);
 
-        sampleERC20.transfer(address(judgeStaking), misplacedAmount);
-        assertEq(sampleERC20.balanceOf(address(judgeStaking)), misplacedAmount);
+        sampleErc20.transfer(address(judgeStaking), misplacedAmount);
+        assertEq(sampleErc20.balanceOf(address(judgeStaking)), misplacedAmount);
 
         vm.expectRevert(abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector, owner, tokenRecoveryAdmin));
         judgeStaking.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
@@ -1302,23 +1302,23 @@ contract JudgeStakingTest is Test {
         judgeStaking.recoverErc20(address(judgeToken), user1, misplacedAmount);
 
         judgeStaking.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
-        assertEq(sampleERC20.balanceOf(user1), misplacedAmount * 9 / 10);
+        assertEq(sampleErc20.balanceOf(user1), misplacedAmount * 9 / 10);
         assertEq(judgeStaking.feeBalanceOfStrandedToken(strandedTokenAddr), misplacedAmount / 10);
     }
 
     function testtransferFeesFromOtherTokensOutOfStaking() public {
         bytes32 tokenRecoveryAdmin = judgeStaking.TOKEN_RECOVERY_ROLE();
         bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
-        address strandedTokenAddr = address(sampleERC20);
+        address strandedTokenAddr = address(sampleErc20);
         uint256 misplacedAmount = 1000 ether;
         uint256 invalidAmount;
         uint8 feePercent = 10;
         judgeStaking.grantRole(stakingAdmin, owner);
         judgeStaking.updateFeePercent(feePercent);
-        sampleERC20.mint(user1, misplacedAmount);
+        sampleErc20.mint(user1, misplacedAmount);
 
         vm.prank(user1);
-        sampleERC20.transfer(address(judgeStaking), misplacedAmount);
+        sampleErc20.transfer(address(judgeStaking), misplacedAmount);
 
         judgeStaking.grantRole(tokenRecoveryAdmin, owner);
         judgeStaking.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
@@ -1351,7 +1351,7 @@ contract JudgeStakingTest is Test {
         judgeStaking.transferFeesFromOtherTokensOutOfStaking(address(judgeToken), user2, misplacedAmount / 10);
 
         judgeStaking.transferFeesFromOtherTokensOutOfStaking(strandedTokenAddr, user2, misplacedAmount / 10);
-        assertEq(sampleERC20.balanceOf(user2), misplacedAmount / 10);
+        assertEq(sampleErc20.balanceOf(user2), misplacedAmount / 10);
         assertEq(judgeStaking.feeBalanceOfStrandedToken(strandedTokenAddr), 0);
     }
 }

@@ -368,7 +368,7 @@ contract JudgeTokenTest is Test {
         uint256 nonce,
         uint256 deadline
     ) internal pure returns (bytes32) {
-        bytes32 DOMAIN_SEPARATOR = keccak256(
+        bytes32 domainSeparator = keccak256(
             abi.encode(
                 keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
                 keccak256(bytes(name)),
@@ -378,14 +378,14 @@ contract JudgeTokenTest is Test {
             )
         );
 
-        bytes32 PERMIT_TYPEHASH =
+        bytes32 permitTypehash =
             keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
         return keccak256(
             abi.encodePacked(
                 "\x19\x01",
-                DOMAIN_SEPARATOR,
-                keccak256(abi.encode(PERMIT_TYPEHASH, signer, spender, value, nonce, deadline))
+                domainSeparator,
+                keccak256(abi.encode(permitTypehash, signer, spender, value, nonce, deadline))
             )
         );
     }

@@ -7,14 +7,14 @@ import "../src/JudgeToken.sol";
 import "../src/RewardsManager.sol";
 import "../src/JudgeTreasury.sol";
 import "../src/JudgeStaking.sol";
-import "../src/SampleERC20.sol";
+import "../src/SampleErc20.sol";
 
 contract RewardsManagerTest is Test {
     JudgeToken public judgeToken;
     RewardsManager public rewardsManager;
     JudgeTreasury public judgeTreasury;
     JudgeStaking public judgeStaking;
-    SampleERC20 public sampleERC20;
+    SampleErc20 public sampleErc20;
 
     address public owner;
     address public zeroAddress;
@@ -62,7 +62,7 @@ contract RewardsManagerTest is Test {
         judgeStaking.setRewardsManagerAddress(address(rewardsManager));
         judgeStaking.setJudgeTreasuryAddress(address(judgeTreasury));
 
-        sampleERC20 = new SampleERC20();
+        sampleErc20 = new SampleErc20();
     }
 
     function testDeployerIsOwner() public {
@@ -241,19 +241,19 @@ contract RewardsManagerTest is Test {
     function testRecoverErc20() public {
         bytes32 tokenRecoveryAdmin = rewardsManager.TOKEN_RECOVERY_ROLE();
         bytes32 rewardsManagerAdmin = rewardsManager.REWARDS_MANAGER_ADMIN_ROLE();
-        address strandedTokenAddr = address(sampleERC20);
+        address strandedTokenAddr = address(sampleErc20);
         uint256 misplacedAmount = 1000 ether;
         uint256 tooHighAmount = 1001 ether;
         uint256 invalidAmount;
         uint8 feePercent = 10;
         rewardsManager.grantRole(rewardsManagerAdmin, owner);
         rewardsManager.updateFeePercent(feePercent);
-        sampleERC20.mint(user1, misplacedAmount);
+        sampleErc20.mint(user1, misplacedAmount);
 
         vm.prank(user1);
 
-        sampleERC20.transfer(address(rewardsManager), misplacedAmount);
-        assertEq(sampleERC20.balanceOf(address(rewardsManager)), misplacedAmount);
+        sampleErc20.transfer(address(rewardsManager), misplacedAmount);
+        assertEq(sampleErc20.balanceOf(address(rewardsManager)), misplacedAmount);
 
         vm.expectRevert(abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector, owner, tokenRecoveryAdmin));
         rewardsManager.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
@@ -282,7 +282,7 @@ contract RewardsManagerTest is Test {
         rewardsManager.recoverErc20(address(judgeToken), user1, misplacedAmount);
 
         rewardsManager.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
-        assertEq(sampleERC20.balanceOf(user1), misplacedAmount * 9 / 10);
+        assertEq(sampleErc20.balanceOf(user1), misplacedAmount * 9 / 10);
         assertEq(rewardsManager.feeBalanceOfStrandedToken(strandedTokenAddr), misplacedAmount / 10);
     }
 
@@ -290,16 +290,16 @@ contract RewardsManagerTest is Test {
         bytes32 tokenRecoveryAdmin = rewardsManager.TOKEN_RECOVERY_ROLE();
         bytes32 rewardsManagerAdmin = rewardsManager.REWARDS_MANAGER_ADMIN_ROLE();
         bytes32 fundManagerRole = rewardsManager.FUND_MANAGER_ROLE();
-        address strandedTokenAddr = address(sampleERC20);
+        address strandedTokenAddr = address(sampleErc20);
         uint256 misplacedAmount = 1000 ether;
         uint256 invalidAmount;
         uint8 feePercent = 10;
         rewardsManager.grantRole(rewardsManagerAdmin, owner);
         rewardsManager.updateFeePercent(feePercent);
-        sampleERC20.mint(user1, misplacedAmount);
+        sampleErc20.mint(user1, misplacedAmount);
 
         vm.prank(user1);
-        sampleERC20.transfer(address(rewardsManager), misplacedAmount);
+        sampleErc20.transfer(address(rewardsManager), misplacedAmount);
 
         rewardsManager.grantRole(tokenRecoveryAdmin, owner);
         rewardsManager.recoverErc20(strandedTokenAddr, user1, misplacedAmount);
@@ -337,7 +337,7 @@ contract RewardsManagerTest is Test {
         rewardsManager.transferFeesFromOtherTokensOutOfRewardsManager(address(judgeToken), user2, misplacedAmount / 10);
 
         rewardsManager.transferFeesFromOtherTokensOutOfRewardsManager(strandedTokenAddr, user2, misplacedAmount / 10);
-        assertEq(sampleERC20.balanceOf(user2), misplacedAmount / 10);
+        assertEq(sampleErc20.balanceOf(user2), misplacedAmount / 10);
         assertEq(rewardsManager.feeBalanceOfStrandedToken(strandedTokenAddr), 0);
     }
 
