@@ -218,13 +218,13 @@ contract JudgeStakingTest is Test {
         judgeTreasury.fundRewardsManager(1);
         uint256 totalRewards = firstQuarterRewards;
 
-        uint256 remainingRewards = totalRewards - judgeStaking.quarterAccruedRewardsForStakes(1);
+        uint256 remainingRewards = totalRewards - judgeStaking.totalAccruedBaseRewards();
         uint256 lastRewardBlock = judgeStaking.lastRewardBlock();
         uint256 quarterEnd = poolStartBlock + 648_000;
         uint256 numberOfBlocksLeft = quarterEnd - lastRewardBlock;
         uint256 rewardPerBlock = remainingRewards / numberOfBlocksLeft;
         vm.prank(address(judgeTreasury));
-        assertEq(judgeStaking.rewardsPerBlock(), rewardPerBlock);
+        assertEq(judgeStaking.rewardsPerBlockForQuarter(1), rewardPerBlock);
 
         vm.roll(poolStartBlock + 655_200);
         vm.prank(address(judgeTreasury));

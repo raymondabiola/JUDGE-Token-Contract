@@ -26,7 +26,7 @@ contract JudgeTokenTest is Test {
     error ERC20InvalidSender(address sender);
     error ERC20InvalidReceiver(address receiver);
     error ERC20InvalidSpender(address spender);
-    error AmountExceedsMintable();
+    error AmountExceedsMintableUnallocatedJudge();
     error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed);
     error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed);
     error AccessControlBadConfirmation();
@@ -58,7 +58,7 @@ contract JudgeTokenTest is Test {
         uint256 cap = 500_000_000 * 10 ** uint256(decimals);
         uint256 mintAmount = 399_900_0001 * 10 ** uint256(decimals);
         assertEq(cap, judgeToken.cap());
-        vm.expectRevert(AmountExceedsMintable.selector);
+        vm.expectRevert(AmountExceedsMintableUnallocatedJudge.selector);
         judgeToken.mint(user1, mintAmount);
     }
 

@@ -18,7 +18,7 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
 
     event Minted(address indexed caller, address indexed to, uint256 amount);
 
-    error AmountExceedsMintable();
+    error AmountExceedsMintableUnallocatedJudge();
     error InitialMintExceedsLimit();
 
     constructor(uint256 initialSupply)
@@ -36,7 +36,7 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
     }
 
     function decreaseMintableUnallocatedJudge(uint256 amount) internal {
-        require(amount <= mintableUnallocatedJudge, AmountExceedsMintable());
+        require(amount <= mintableUnallocatedJudge, AmountExceedsMintableUnallocatedJudge());
         mintableUnallocatedJudge -= amount;
     }
 
