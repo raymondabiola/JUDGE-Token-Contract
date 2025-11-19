@@ -87,7 +87,7 @@ contract RewardsManagerTest is Test {
         vm.expectRevert(EOANotAllowed.selector);
         rewardsManager.setJudgeTreasuryAddress(user1);
 
-        // For testing purpose we are using judgeToken address as placeholder for new treasury contract
+        // For testing purpose we are using judgeToken address as another contract placeholder for new treasury contract
         rewardsManager.setJudgeTreasuryAddress(address(judgeToken));
         assertEq(address(rewardsManager.judgeTreasury()), address(judgeToken));
     }
@@ -184,6 +184,21 @@ contract RewardsManagerTest is Test {
         rewardsManager.emergencyWithdrawal(address(rewardsManager));
         rewardsManager.emergencyWithdrawal(user1);
         assertEq(judgeToken.balanceOf(user1), 1_000_000 * 10 ** uint256(decimals));
+    }
+    function testSendBonus()public{
+
+    }
+    
+     function testSendRewards() public {
+        
+    }
+
+    function testTotalRewardsPaid() public{
+
+    }
+
+    function testAvailableRewards() public{
+
     }
 
     function testCalculateMisplacedJudge() public {
@@ -340,6 +355,4 @@ contract RewardsManagerTest is Test {
         assertEq(sampleErc20.balanceOf(user2), misplacedAmount / 10);
         assertEq(rewardsManager.feeBalanceOfStrandedToken(strandedTokenAddr), 0);
     }
-
-    function testSendRewards() public {}
 }
