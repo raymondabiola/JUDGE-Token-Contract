@@ -80,6 +80,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error CurrentQuarterAllocationNotYetFunded();
     error BaseRewardsNotSet();
     error QuarterAllocationAlreadyFunded();
+    error DurationBeyondQuarterEnd();
 
     constructor(address _judgeTokenAddress, address _rewardsManagerAddress, address _judgeStakingAddress) {
         require(
@@ -171,11 +172,17 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     function addBonusToQuarterReward(uint256 _bonus, uint256 _durationInBlocks) external validAmount(_bonus) validAmount(_durationInBlocks) {
         uint32 currentQuarterIndex = judgeStaking.getCurrentQuarterIndex();
+        uint256 stakingStart = judgeStaking.stakingPoolStartBlock();
+        uint256 quarterBlocks = judgeStaking.QUARTER_BLOCKS();
+
+        uint256 quarterStart = stakingStart + (uint256(currentQuarterIndex) - 1) * quarterBlocks;
+        uint256 quarterEnd = quarterStart + quarterBlocks;
         uint256 b = block.number;
          require(
             quarters[currentQuarterIndex].isFunded,
             CurrentQuarterAllocationNotYetFunded()
         );
+        require(_durationInBlocks <= quarterEnd - b, DurationBeyondQuarterEnd());
         require(_bonus >= _durationInBlocks, BonusTooSmall());
         require(b > quarters[currentQuarterIndex].bonusEndBlock, lastBonusStillRunning());
 
