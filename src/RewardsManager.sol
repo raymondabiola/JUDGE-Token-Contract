@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import {AccessControl} from "../lib/openzeppelin-contracts/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "../lib/openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
 import {SafeERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Math} from "../lib/openzeppelin-contracts/contracts/utils/math/Math.sol";
 import {IERC20} from "../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import {JudgeToken} from "./JudgeToken.sol";
 import {JudgeTreasury} from "./JudgeTreasury.sol";
@@ -20,8 +19,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     bytes32 public constant REWARDS_MANAGER_ADMIN_ROLE = keccak256("REWARDS_MANAGER_ADMIN_ROLE");
     bytes32 public constant TOKEN_RECOVERY_ROLE = keccak256("TOKEN_RECOVERY_ROLE");
     bytes32 public constant FUND_MANAGER_ROLE = keccak256("FUND_MANAGER_ROLE");
-    bytes32 public constant REWARDS_MANAGER_PRECISE_BALANCE_UPDATER =
-        keccak256("REWARDS_MANAGER_PRECISE_BALANCE_UPDATER"); //Assign Role to judgeTreasury at deployment
+    bytes32 public constant REWARDS_MANAGER_PRECISE_BALANCE_UPDATER = keccak256("REWARDS_MANAGER_PRECISE_BALANCE_UPDATER"); //Assign Role to judgeTreasury at deployment
 
     uint256 public totalBaseRewardsPaid;
     uint256 public totalBonusRewardsPaid;
@@ -56,8 +54,8 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     error NotUpToThreshold();
     error JudgeTreasuryNotSet();
 
-    constructor(address _judgeTokenAddress) validAddress(_judgeTokenAddress) {
-        require(_judgeTokenAddress.code.length > 0, EOANotAllowed());
+    constructor(address _judgeTokenAddress) {
+        if(_judgeTokenAddress.code.length == 0) revert EAONotAllowed();
         judgeToken = JudgeToken(_judgeTokenAddress);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         emit JudgeTokenAddressWasSet(_judgeTokenAddress);
@@ -80,19 +78,16 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
 
     function setJudgeTreasuryAddress(address _judgeTreasuryAddress)
         external
-        validAddress(_judgeTreasuryAddress)
         notSelf(_judgeTreasuryAddress)
         onlyRole(REWARDS_MANAGER_ADMIN_ROLE)
     {
-        require(_judgeTreasuryAddress.code.length > 0, EOANotAllowed());
-
+        if(_judgeTreasuryAddress.code.length == 0) revert EOANotAllowed();
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
-
         emit JudgeTreasuryAddressUpdated(_judgeTreasuryAddress);
     }
 
     function updateFeePercent(uint8 _newFeePercent) external onlyRole(REWARDS_MANAGER_ADMIN_ROLE) {
-        require(_newFeePercent <= FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
+        if(_newFeePercent > FEE_PERCENT_MAX_THRESHOLD) revert ValueHigherThanThreshold();
         uint8 oldFeePercent = feePercent;
         feePercent = _newFeePercent;
         emit FeePercentUpdated(oldFeePercent, _newFeePercent);
@@ -112,7 +107,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         external
         onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER)
     {
-        require(address(judgeTreasury) != address(0), JudgeTreasuryNotSet());
+        if(address(judgeTreasury) == address(0)) revert JudgeTreasuryNotSet();
         rewardsManagerPreciseBalance += _amount;
     }
 
@@ -120,7 +115,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         external
         onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER)
     {
-         require(address(judgeTreasury) != address(0), JudgeTreasuryNotSet());
+        if(address(judgeTreasury) == address(0)) revert JudgeTreasuryNotSet();
         rewardsManagerBonusBalance += _amount;
     }
 
@@ -131,7 +126,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         validAddress(_addr)
         nonReentrant
     {
-        require(_amount <= rewardsManagerPreciseBalance, InsufficientBalance());
+        if(_amount > rewardsManagerPreciseBalance) revert InsufficientBalance();
         totalBaseRewardsPaid += _amount;
         rewardsManagerPreciseBalance -= _amount;
         judgeToken.safeTransfer(_addr, _amount);
@@ -143,7 +138,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         validAddress(_addr)
         nonReentrant
     {
-        require(_amount <= rewardsManagerBonusBalance, InsufficientBalance());
+        if(_amount > rewardsManagerBonusBalance) revert InsufficientBalance();
         totalBonusRewardsPaid += _amount;
         rewardsManagerBonusBalance -= _amount;
         judgeToken.safeTransfer(_addr, _amount);
@@ -158,7 +153,8 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         nonReentrant
     {
         uint256 totalAvailable = rewardsManagerPreciseBalance + rewardsManagerBonusBalance;
-        require(_amount <= totalAvailable, InsufficientBalance());
+        if(_amount > totalAvailable) revert InsufficientBalance();
+
         if(_amount <= rewardsManagerPreciseBalance){
             rewardsManagerPreciseBalance -= _amount;
         }else{
@@ -179,7 +175,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         nonReentrant
     {
         uint256 balance = judgeToken.balanceOf(address(this));
-        require(balance > 0, InsufficientContractBalance());
+        if(balance < 0) revert InsufficientContractBalance();
         judgeToken.safeTransfer(_to, balance);
         rewardsManagerPreciseBalance = 0;
         rewardsManagerBonusBalance = 0;
@@ -212,11 +208,11 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         onlyRole(TOKEN_RECOVERY_ROLE)
         nonReentrant
     {
-        require(address(judgeTreasury) != address(0), JudgeTreasuryNotSet());
+        if(address(judgeTreasury) == address(0)) revert JudgeTreasuryNotSet();
         uint256 misplacedJudgeAmount = calculateMisplacedJudge();
-        require(_amount <= misplacedJudgeAmount, InvalidAmount());
-        require(_amount >= judgeRecoveryMinimumThreshold, NotUpToThreshold());
-        uint256 refund = Math.mulDiv(_amount, (100 - uint256(feePercent)), 100);
+        if(_amount > misplacedJudgeAmount) revert InvalidAmount();
+        if(_amount < judgeRecoveryMinimumThreshold) revert NotUpToThreshold();
+        uint256 refund = (_amount * (100 - uint256(feePercent))) / 100;
         uint256 fee = _amount - refund;
         if(fee > 0){
         judgeToken.safeTransfer(address(judgeTreasury), fee);
@@ -233,11 +229,11 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         onlyRole(TOKEN_RECOVERY_ROLE)
         nonReentrant
     {
-        require(_strandedTokenAddr != address(0) && _addr != address(0), InvalidAddress());
-        require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
-        require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), InsufficientContractBalance());
+        if(_strandedTokenAddr == address(0) || _addr == address(0)) revert InvalidAddress();
+        if(_strandedTokenAddr == address(judgeToken)) revert JudgeTokenRecoveryNotAllowed();
+        if(_amount > IERC20(_strandedTokenAddr).balanceOf(address(this))) revert InsufficientContractBalance();
 
-        uint256 refund = Math.mulDiv(_amount, (100 - uint256(feePercent)), 100);
+        uint256 refund = (_amount * (100 - uint256(feePercent))) / 100;
         uint256 fee = _amount - refund;
         if(fee > 0){
         feeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
@@ -253,9 +249,10 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         onlyRole(FUND_MANAGER_ROLE)
         nonReentrant
     {
-        require(_strandedTokenAddr != address(0) && _to != address(0), InvalidAddress());
-        require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
-        require(_amount <= feeBalanceOfStrandedToken[_strandedTokenAddr], InsufficientBalance());
+        if(_strandedTokenAddr == address(0) || _to == address(0)) revert InvalidAddress();
+        if(_strandedTokenAddr == address(judgeToken)) revert JudgeTokenRecoveryNotAllowed();
+        if(_amount > feeBalanceOfStrandedToken[_strandedTokenAddr]) revert InsufficientBalance();
+
         feeBalanceOfStrandedToken[_strandedTokenAddr] -= _amount;
         IERC20(_strandedTokenAddr).safeTransfer(_to, _amount);
         emit FeesFromOtherTokensTransferred(

@@ -173,15 +173,11 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         uint256 quarterStart = stakingStart + (uint256(currentQuarterIndex) - 1) * quarterBlocks;
         uint256 quarterEnd = quarterStart + quarterBlocks;
         uint256 b = block.number;
-         require(
-            quarters[currentQuarterIndex].isFunded,
-            CurrentQuarterAllocationNotYetFunded()
-        );
+        if(!quarters[currentQuarterIndex].isFunded) revert CurrentQuarterAllocationNotYetFunded();
         if(_durationInBlocks < 100_000) revert DurationTooLow();
         if(_durationInBlocks > quarterEnd - b) revert DurationBeyondQuarterEnd();
         if(_bonus < _durationInBlocks) revert BonusTooSmall();
         if(b < quarters[currentQuarterIndex].bonusEndBlock) revert lastBonusStillRunning();
-        require(b > quarters[currentQuarterIndex].bonusEndBlock, lastBonusStillRunning());
 
         quarters[currentQuarterIndex].bonus += _bonus;
         quarters[currentQuarterIndex].bonusEndBlock = b + _durationInBlocks;
@@ -199,15 +195,9 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     function fundRewardsManager(uint32 _index) external onlyRole(FUND_MANAGER_ROLE) {
         uint256 rewardAmount = quarters[_index].baseReward;
-        require(!quarters[_index].isFunded, QuarterAllocationAlreadyFunded());
-        require(
-            stakingRewardsFundsFromTreasury < judgeToken.MAX_STAKING_REWARD_ALLOCATION(),
-            TotalStakingRewardAllocationExceeded()
-        );
-        require(
-            rewardAmount <= judgeToken.MAX_STAKING_REWARD_ALLOCATION() - stakingRewardsFundsFromTreasury,
-            ExceedsRemainingAllocation()
-        );
+        if(quarters[_index].isFunded) revert QuarterAllocationAlreadyFunded();
+        if(stakingRewardsFundsFromTreasury > judgeToken.MAX_STAKING_REWARD_ALLOCATION) revert TotalStakingRewardAllocationExceeded();
+        if(rewardAmount > judgeToken.MAX_STAKING_REWARD_ALLOCATION() -stakingRewardsFundsFromTreasury) revert ExceedsRemainingAllocation();
         judgeToken.mintFromAllocation(address(rewardsManager), rewardAmount);
         stakingRewardsFundsFromTreasury += rewardAmount;
         rewardsManager.increaseRewardsManagerPreciseBalance(rewardAmount);
@@ -235,8 +225,8 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         onlyRole(FUND_MANAGER_ROLE)
         nonReentrant
     {
-        require(teamFundingReceived < judgeToken.MAX_TEAM_ALLOCATION(), TeamDevelopmentAllocationExceeded());
-        require(_amount <= judgeToken.MAX_TEAM_ALLOCATION() - teamFundingReceived, ExceedsRemainingAllocation());
+        if(teamFundingReceived > judgeToken.MAX_TEAM_ALLOCATION()) revert TeamDevelopmentAllocationExceeded();
+        if(_amount > judgeToken.MAX_TEAM_ALLOCATION() - teamFundingReceived) revert ExceedsRemainingAllocation();
         judgeToken.mintFromAllocation(_addr, _amount);
         teamFundingReceived += _amount;
         emit TeamDevelopmentWasFunded(_addr, _amount);
@@ -249,7 +239,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         validAmount(_amount)
         nonReentrant
     {
-        require(_amount <= treasuryPreciseBalance, InsufficientBalance());
+        if(_amount > treasuryPreciseBalance) revert InsufficientBalance();
 
         treasuryPreciseBalance -= _amount;
         judgeToken.transfer(_addr, _amount);
@@ -281,8 +271,8 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         nonReentrant
     {
         uint256 misplacedJudgeAmount = calculateMisplacedJudge();
-        require(_amount <= misplacedJudgeAmount, InvalidAmount());
-        require(_amount >= judgeRecoveryMinimumThreshold, NotUpToThreshold());
+        if(_amount > misplacedJudgeAmount) revert InvalidAmount();
+        if(_amount < judgeRecoveryMinimumThreshold) revert NotUpToThreshold();
         uint256 refund = (_amount * (100 - uint256(settings.feePercent)))/ 100;
         uint256 fee = _amount - refund;
         if(fee > 0){
@@ -298,10 +288,10 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         onlyRole(TOKEN_RECOVERY_ROLE)
         nonReentrant
     {
-       require(_addr != address(this), CannotInputThisContractAddress());
-        require(_strandedTokenAddr != address(0) && _addr != address(0), InvalidAddress());
-        require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
-        require(_amount <= IERC20(_strandedTokenAddr).balanceOf(address(this)), InsufficientContractBalance());
+        if(_addr == address(this)) revert CannotInputThisContractAddress();
+        if(_strandedTokenAddr == address(0) || _addr == address(0)) revert InvalidAddress();
+        if(_strandedTokenAddr == address(judgeToken)) revert JudgeTokenRecoveryNotAllowed();
+        if(_amount > IERC20(_strandedTokenAddr).balanceOf(address(this))) revert InsufficientContractBalance();
 
         uint256 refund = (_amount * (100 - uint256(settings.feePercent))) / 100;
         uint256 fee = _amount - refund;
@@ -318,10 +308,10 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         onlyRole(FUND_MANAGER_ROLE)
         nonReentrant
     {
-        require(_to != address(this), CannotInputThisContractAddress());
-        require(_strandedTokenAddr != address(0) && _to != address(0), InvalidAddress());
-        require(_strandedTokenAddr != address(judgeToken), JudgeTokenRecoveryNotAllowed());
-        require(_amount <= feeBalanceOfStrandedToken[_strandedTokenAddr], InsufficientBalance());
+        if(_to == address(this)) revert CannotInputThisContractAddress();
+        if(_strandedTokenAddr == address(0) || _to == address(0)) revert InvalidAddress();
+        if(_strandedTokenAddr == address(judgeToken)) revert JudgeTokenRecoveryNotAllowed();
+        if(_amount > feeBalanceOfStrandedToken[_strandedTokenAddr]) revert InsufficientBalance();
         feeBalanceOfStrandedToken[_strandedTokenAddr] -= _amount;
         IERC20(_strandedTokenAddr).safeTransfer(_to, _amount);
         emit FeesFromOtherTokensTransferred(

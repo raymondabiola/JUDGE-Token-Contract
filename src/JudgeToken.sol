@@ -26,7 +26,7 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
         ERC20Capped(500_000_000 * 10 ** decimals())
         ERC20Permit("JudgeToken")
     {
-        require(initialSupply <= 100_000 * 10 ** decimals(), InitialMintExceedsLimit());
+        if(initialSupply > 100_000 * 10 ** decimals()) revert InitialMintExceedsLimit();
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(MINTER_ROLE, msg.sender);
         _mint(msg.sender, initialSupply);
@@ -36,7 +36,7 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
     }
 
     function decreaseMintableUnallocatedJudge(uint256 amount) internal {
-        require(amount <= mintableUnallocatedJudge, AmountExceedsMintableUnallocatedJudge());
+        if(amount > mintableUnallocatedJudge) revert AmountExceedsMintableUnallocatedJudge();
         mintableUnallocatedJudge -= amount;
     }
 
