@@ -81,13 +81,11 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error BaseRewardsNotSet();
     error QuarterAllocationAlreadyFunded();
     error DurationBeyondQuarterEnd();
+    error DurationTooLow();
 
     constructor(address _judgeTokenAddress, address _rewardsManagerAddress, address _judgeStakingAddress) {
-        require(
-            _judgeTokenAddress.code.length > 0 && _rewardsManagerAddress.code.length > 0
-                && _judgeStakingAddress.code.length > 0,
-            EOANotAllowed()
-        );
+        if(_judgeTokenAddress.code.length == 0 || _rewardsManagerAddress.code.length == 0
+                || _judgeStakingAddress.code.length == 0) revert EOANotAllowed();
         judgeToken = JudgeToken(_judgeTokenAddress);
         rewardsManager = RewardsManager(_rewardsManagerAddress);
         judgeStaking = JudgeStaking(_judgeStakingAddress);
@@ -145,7 +143,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     }
 
     function updateFeePercent(uint8 _newFeePercent) external onlyRole(TREASURY_ADMIN_ROLE) {
-        require(_newFeePercent <= FEE_PERCENT_MAX_THRESHOLD, ValueHigherThanThreshold());
+        if(_newFeePercent > FEE_PERCENT_MAX_THRESHOLD) revert ValueHigherThanThreshold();
         uint8 oldFeePercent = settings.feePercent;
         settings.feePercent = _newFeePercent;
         emit FeePercentUpdated(oldFeePercent, _newFeePercent);
@@ -161,11 +159,8 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     }
 
     function setNewQuarterlyRewards(uint256 _reward) public onlyRole(TREASURY_ADMIN_ROLE) {
-        require(_reward != 0, InvalidAmount());
-        require(
-            _reward >= MIN_QUARTERLY_REWARD_ALLOCATION && _reward <= MAX_QUARTERLY_REWARD_ALLOCATION,
-            RewardsInputedOutOfDefinedRange()
-        );
+        if(_reward == 0) revert InvalidAmount();
+        if(_reward < MIN_QUARTERLY_REWARD_ALLOCATION || _reward >MAX_QUARTERLY_REWARD_ALLOCATION) revert RewardsInputedOutOfDefinedRange();
         quarters[quarterIndex].baseReward = _reward;
         quarterIndex += 1;
     }
@@ -182,8 +177,10 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
             quarters[currentQuarterIndex].isFunded,
             CurrentQuarterAllocationNotYetFunded()
         );
-        require(_durationInBlocks <= quarterEnd - b, DurationBeyondQuarterEnd());
-        require(_bonus >= _durationInBlocks, BonusTooSmall());
+        if(_durationInBlocks < 100_000) revert DurationTooLow();
+        if(_durationInBlocks > quarterEnd - b) revert DurationBeyondQuarterEnd();
+        if(_bonus < _durationInBlocks) revert BonusTooSmall();
+        if(b < quarters[currentQuarterIndex].bonusEndBlock) revert lastBonusStillRunning();
         require(b > quarters[currentQuarterIndex].bonusEndBlock, lastBonusStillRunning());
 
         quarters[currentQuarterIndex].bonus += _bonus;
