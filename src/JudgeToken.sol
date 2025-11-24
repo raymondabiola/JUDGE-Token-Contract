@@ -15,10 +15,12 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
     uint256 public immutable MAX_STAKING_REWARD_ALLOCATION = 50_000_000 * 10 ** 18;
     uint256 public immutable MAX_TEAM_ALLOCATION = 50_000_000 * 10 ** 18;
     uint256 public mintableUnallocatedJudge;
+    uint256 public mintableAllocatedJudge;
 
     event Minted(address indexed caller, address indexed to, uint256 amount);
 
     error AmountExceedsMintableUnallocatedJudge();
+    error AmountExceedsMintableAllocatedJudge();
     error InitialMintExceedsLimit();
 
     constructor(uint256 initialSupply)
@@ -32,12 +34,18 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
         _mint(msg.sender, initialSupply);
 
         mintableUnallocatedJudge = cap() - MAX_STAKING_REWARD_ALLOCATION - MAX_TEAM_ALLOCATION - initialSupply;
+        mintableAllocatedJudge = MAX_STAKING_REWARD_ALLOCATION + MAX_TEAM_ALLOCATION;
         emit Minted(msg.sender, msg.sender, initialSupply);
     }
 
     function decreaseMintableUnallocatedJudge(uint256 amount) internal {
         if(amount > mintableUnallocatedJudge) revert AmountExceedsMintableUnallocatedJudge();
         mintableUnallocatedJudge -= amount;
+    }
+
+    function decreaseMintableAllocatedJudge(uint256 amount) internal {
+        if(amount > mintableAllocatedJudge) revert AmountExceedsMintableAllocatedJudge();
+        mintableAllocatedJudge -= amount;
     }
 
     function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
@@ -48,6 +56,7 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
 
     // Default admin should grant the allocation_minter role only to judgeTreasury
     function mintFromAllocation(address to, uint256 amount) external onlyRole(ALLOCATION_MINTER_ROLE) {
+        decreaseMintableAllocatedJudge(amount);
         _mint(to, amount);
         emit Minted(msg.sender, to, amount);
     }
