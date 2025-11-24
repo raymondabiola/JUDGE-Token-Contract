@@ -21,7 +21,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     bytes32 public immutable TOKEN_RECOVERY_ROLE = keccak256("TOKEN_RECOVERY_ROLE");
     bytes32 public immutable TREASURY_PRECISE_BALANCE_UPDATER = keccak256("TREASURY_PRECISE_BALANCE_UPDATER"); //Assign to judgeStaking on deployment
 
-    uint256 public stakingRewardsFundsFromTreasury; //Total rewards sent to rewardsManager From treasury excluding bonus rewards.
+    uint256 public totalBaseRewardsFunded; //Total rewards sent to rewardsManager From treasury excluding bonus rewards.
     uint256 public teamFundingReceived;
     uint256 public treasuryPreciseBalance; //Exact total amount of judgeTokens in treasury contract excluding misplaced judgeTokens
     uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30;
@@ -71,8 +71,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error InsufficientContractBalance();
     error EOANotAllowed();
     error RewardsInputedOutOfDefinedRange();
-    error TotalStakingRewardAllocationExceeded();
-    error TeamDevelopmentAllocationExceeded();
     error ExceedsRemainingAllocation();
     error lastBonusStillRunning();
     error NotUpToThreshold();
@@ -123,7 +121,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     function setRewardsManagerAddress(address newRewardsManagerAddress)
         external
-        onlyRole(TREASURY_ADMIN_ROLE)
+        onlyRole(DEFAULT_ADMIN_ROLE)
         validAddress(newRewardsManagerAddress)
         notEoa(newRewardsManagerAddress)
     {
@@ -133,7 +131,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     function setJudgeStakingAddress(address newJudgeStakingAddress)
         external
-        onlyRole(TREASURY_ADMIN_ROLE)
+        onlyRole(DEFAULT_ADMIN_ROLE)
         validAddress(newJudgeStakingAddress)
         notEoa(newJudgeStakingAddress)
     {
@@ -183,7 +181,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         quarters[currentQuarterIndex].bonusEndBlock = b + _durationInBlocks;
 
         judgeToken.transferFrom(msg.sender, address(rewardsManager), _bonus);
-        rewardsManager.increaseRewardsManagerBonusBalance(_bonus);
+        rewardsManager.increaseRewardsManagerBonusBalanceAccounting(_bonus);
         judgeStaking.updatePool();
         judgeStaking.syncQuarterBonusRewardsPerBlock(currentQuarterIndex, _bonus, _durationInBlocks);
     }
@@ -196,11 +194,10 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     function fundRewardsManager(uint32 _index) external onlyRole(FUND_MANAGER_ROLE) {
         uint256 rewardAmount = quarters[_index].baseReward;
         if(quarters[_index].isFunded) revert QuarterAllocationAlreadyFunded();
-        if(stakingRewardsFundsFromTreasury > judgeToken.MAX_STAKING_REWARD_ALLOCATION) revert TotalStakingRewardAllocationExceeded();
-        if(rewardAmount > judgeToken.MAX_STAKING_REWARD_ALLOCATION() -stakingRewardsFundsFromTreasury) revert ExceedsRemainingAllocation();
+        if(rewardAmount > judgeToken.MAX_STAKING_REWARD_ALLOCATION() - totalBaseRewardsFunded) revert ExceedsRemainingAllocation();
         judgeToken.mintFromAllocation(address(rewardsManager), rewardAmount);
-        stakingRewardsFundsFromTreasury += rewardAmount;
-        rewardsManager.increaseRewardsManagerPreciseBalance(rewardAmount);
+        totalBaseRewardsFunded += rewardAmount;
+        rewardsManager.increaseRewardsManagerBaseBalanceAccounting(rewardAmount);
 
         quarters[_index].isFunded = true;
 
@@ -225,7 +222,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         onlyRole(FUND_MANAGER_ROLE)
         nonReentrant
     {
-        if(teamFundingReceived > judgeToken.MAX_TEAM_ALLOCATION()) revert TeamDevelopmentAllocationExceeded();
         if(_amount > judgeToken.MAX_TEAM_ALLOCATION() - teamFundingReceived) revert ExceedsRemainingAllocation();
         judgeToken.mintFromAllocation(_addr, _amount);
         teamFundingReceived += _amount;
@@ -248,7 +244,8 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     }
 
     function remainingStakingAllocation()public view returns(uint256){
-        return judgeToken.MAX_STAKING_REWARD_ALLOCATION() > stakingRewardsFundsFromTreasury ? judgeToken.MAX_STAKING_REWARD_ALLOCATION() - stakingRewardsFundsFromTreasury : 0;
+        uint256 maxStakingAllocation = judgeToken.MAX_STAKING_REWARD_ALLOCATION();
+        return maxStakingAllocation > totalBaseRewardsFunded ? maxStakingAllocation - totalBaseRewardsFunded : 0;
     }
 
     function remainingTeamAllocation()public view returns(uint256){

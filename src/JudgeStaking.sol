@@ -17,7 +17,7 @@ interface IRewardsManager {
 contract JudgeStaking is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    JudgeToken public judgeToken;
+    JudgeToken public immutable judgeToken;
     JudgeTreasury public judgeTreasury;
     IRewardsManager public rewardsManager;
 
@@ -122,6 +122,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         settings.earlyWithdrawPenaltyPercentForMaxLockupPeriod = _earlyWithdrawPenaltyPercentForMaxLockupPeriod;
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         stakingPoolStartBlock = block.number;
+        lastRewardBlock = stakingPoolStartBlock;
         emit JudgeTokenAddressWasSet(_judgeTokenAddress);
         emit EarlyWithdrawPenaltyPercentForMaxLockupPeriodInitialized(_earlyWithdrawPenaltyPercentForMaxLockupPeriod);
     }
@@ -155,7 +156,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     // == ADMIN FUNCTIONS ==
     function setRewardsManagerAddress(address _rewardsManagerAddress)
         external
-        onlyRole(STAKING_ADMIN_ROLE)
+        onlyRole(DEFAULT_ADMIN_ROLE)
         validAddress(_rewardsManagerAddress)
         notSelf(_rewardsManagerAddress)
         notEoa(_rewardsManagerAddress)
@@ -166,7 +167,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
     function setJudgeTreasuryAddress(address _judgeTreasuryAddress)
         external
-        onlyRole(STAKING_ADMIN_ROLE)
+        onlyRole(DEFAULT_ADMIN_ROLE)
         validAddress(_judgeTreasuryAddress)
         notSelf(_judgeTreasuryAddress)
         notEoa(_judgeTreasuryAddress)
@@ -645,10 +646,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     // == TOKEN RECOVERY FUNCTIONS ==
     function calculateMisplacedJudge() public view returns (uint256) {
         uint256 contractBalance = judgeToken.balanceOf(address(this));
-        uint256 misplacedJudgeAmount = 0;
-        if(contractBalance > totalStaked){
-        misplacedJudgeAmount = contractBalance - totalStaked;
-        }
+        uint256 total = totalStaked;
+        uint256 misplacedJudgeAmount = contractBalance > total ? contractBalance - total : 0;
         return misplacedJudgeAmount;
     }
 

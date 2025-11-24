@@ -40,12 +40,12 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
 
     function decreaseMintableUnallocatedJudge(uint256 amount) internal {
         if(amount > mintableUnallocatedJudge) revert AmountExceedsMintableUnallocatedJudge();
-        mintableUnallocatedJudge -= amount;
+        unchecked{mintableUnallocatedJudge -= amount;}
     }
 
     function decreaseMintableAllocatedJudge(uint256 amount) internal {
         if(amount > mintableAllocatedJudge) revert AmountExceedsMintableAllocatedJudge();
-        mintableAllocatedJudge -= amount;
+        unchecked{mintableAllocatedJudge -= amount;}
     }
 
     function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
