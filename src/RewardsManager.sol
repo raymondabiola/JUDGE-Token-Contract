@@ -55,7 +55,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     error JudgeTreasuryNotSet();
 
     constructor(address _judgeTokenAddress) {
-        if(_judgeTokenAddress.code.length == 0) revert EAONotAllowed();
+        if(_judgeTokenAddress.code.length == 0) revert EOANotAllowed();
         judgeToken = JudgeToken(_judgeTokenAddress);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         emit JudgeTokenAddressWasSet(_judgeTokenAddress);
@@ -175,7 +175,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         nonReentrant
     {
         uint256 balance = judgeToken.balanceOf(address(this));
-        if(balance < 0) revert InsufficientContractBalance();
+        if(balance == 0) revert InsufficientContractBalance();
         judgeToken.safeTransfer(_to, balance);
         rewardsManagerPreciseBalance = 0;
         rewardsManagerBonusBalance = 0;

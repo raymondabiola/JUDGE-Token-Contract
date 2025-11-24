@@ -638,7 +638,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         onlyRole(STAKING_ADMIN_ROLE)
         returns (UserStake memory)
     {
-        if(_index > userStakes[addr].length) revert InvalidIndex();
+        if(_index >= userStakes[addr].length) revert InvalidIndex();
         return userStakes[addr][_index];
     }
 
