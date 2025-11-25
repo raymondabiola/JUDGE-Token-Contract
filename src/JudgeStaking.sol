@@ -299,8 +299,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         }
     }
 
+    function poolHasStaleQuarters() public view returns(bool){
+        return settings.lastFullyUpdatedQuarter < getCurrentQuarterIndex()-1;
+    }
+
     function isPoolUpToDate()public view returns(bool){
-        return !(settings.lastFullyUpdatedQuarter < getCurrentQuarterIndex()-1);
+        return lastRewardBlock == block.number && settings.lastFullyUpdatedQuarter >= getCurrentQuarterIndex()-1;
     }
 
     // == USER WRITE FUNCTIONS ==
