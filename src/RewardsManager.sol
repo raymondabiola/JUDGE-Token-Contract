@@ -18,7 +18,8 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     bytes32 public constant REWARDS_MANAGER_ADMIN_ROLE = keccak256("REWARDS_MANAGER_ADMIN_ROLE");
     bytes32 public constant TOKEN_RECOVERY_ROLE = keccak256("TOKEN_RECOVERY_ROLE");
     bytes32 public constant FUND_MANAGER_ROLE = keccak256("FUND_MANAGER_ROLE");
-    bytes32 public constant REWARDS_MANAGER_PRECISE_BALANCE_UPDATER = keccak256("REWARDS_MANAGER_PRECISE_BALANCE_UPDATER"); //Assign Role to judgeTreasury at deployment
+    bytes32 public constant REWARDS_MANAGER_PRECISE_BALANCE_UPDATER =
+        keccak256("REWARDS_MANAGER_PRECISE_BALANCE_UPDATER"); //Assign Role to judgeTreasury at deployment
 
     uint256 public totalBaseRewardsPaid;
     uint256 public totalBonusRewardsPaid;
@@ -54,7 +55,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     error JudgeTreasuryNotSet();
 
     constructor(address _judgeTokenAddress) {
-        if(_judgeTokenAddress.code.length == 0) revert EOANotAllowed();
+        if (_judgeTokenAddress.code.length == 0) revert EOANotAllowed();
         judgeToken = JudgeToken(_judgeTokenAddress);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         emit JudgeTokenAddressWasSet(_judgeTokenAddress);
@@ -80,13 +81,13 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         notSelf(_judgeTreasuryAddress)
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        if(_judgeTreasuryAddress.code.length == 0) revert EOANotAllowed();
+        if (_judgeTreasuryAddress.code.length == 0) revert EOANotAllowed();
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
         emit JudgeTreasuryAddressUpdated(_judgeTreasuryAddress);
     }
 
     function updateFeePercent(uint8 _newFeePercent) external onlyRole(REWARDS_MANAGER_ADMIN_ROLE) {
-        if(_newFeePercent > FEE_PERCENT_MAX_THRESHOLD) revert ValueHigherThanThreshold();
+        if (_newFeePercent > FEE_PERCENT_MAX_THRESHOLD) revert ValueHigherThanThreshold();
         uint8 oldFeePercent = feePercent;
         feePercent = _newFeePercent;
         emit FeePercentUpdated(oldFeePercent, _newFeePercent);
@@ -106,7 +107,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         external
         onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER)
     {
-        if(address(judgeTreasury) == address(0)) revert JudgeTreasuryNotSet();
+        if (address(judgeTreasury) == address(0)) revert JudgeTreasuryNotSet();
         rewardsManagerBaseRewardBalance += _amount;
     }
 
@@ -114,7 +115,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         external
         onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER)
     {
-        if(address(judgeTreasury) == address(0)) revert JudgeTreasuryNotSet();
+        if (address(judgeTreasury) == address(0)) revert JudgeTreasuryNotSet();
         rewardsManagerBonusBalance += _amount;
     }
 
@@ -125,7 +126,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         validAddress(_addr)
         nonReentrant
     {
-        if(_amount > rewardsManagerBaseRewardBalance) revert InsufficientBalance();
+        if (_amount > rewardsManagerBaseRewardBalance) revert InsufficientBalance();
         totalBaseRewardsPaid += _amount;
         rewardsManagerBaseRewardBalance -= _amount;
         judgeToken.transfer(_addr, _amount);
@@ -137,7 +138,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         validAddress(_addr)
         nonReentrant
     {
-        if(_amount > rewardsManagerBonusBalance) revert InsufficientBalance();
+        if (_amount > rewardsManagerBonusBalance) revert InsufficientBalance();
         totalBonusRewardsPaid += _amount;
         rewardsManagerBonusBalance -= _amount;
         judgeToken.transfer(_addr, _amount);
@@ -152,11 +153,11 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         nonReentrant
     {
         uint256 totalAvailable = rewardsManagerBaseRewardBalance + rewardsManagerBonusBalance;
-        if(_amount > totalAvailable) revert InsufficientBalance();
+        if (_amount > totalAvailable) revert InsufficientBalance();
 
-        if(_amount <= rewardsManagerBaseRewardBalance){
+        if (_amount <= rewardsManagerBaseRewardBalance) {
             rewardsManagerBaseRewardBalance -= _amount;
-        }else{
+        } else {
             uint256 remainder = _amount - rewardsManagerBaseRewardBalance;
             rewardsManagerBaseRewardBalance = 0;
             rewardsManagerBonusBalance -= remainder;
@@ -174,26 +175,27 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         nonReentrant
     {
         uint256 balance = judgeToken.balanceOf(address(this));
-        if(balance == 0) revert InsufficientContractBalance();
+        if (balance == 0) revert InsufficientContractBalance();
         judgeToken.transfer(_to, balance);
         rewardsManagerBaseRewardBalance = 0;
         rewardsManagerBonusBalance = 0;
         emit EmergencyWithdrawal(msg.sender, _to, balance);
     }
 
-    function totalRewardsPaid() external view returns(uint256 base, uint256 bonus, uint256 total){
+    function totalRewardsPaid() external view returns (uint256 base, uint256 bonus, uint256 total) {
         total = totalBaseRewardsPaid + totalBonusRewardsPaid;
         return (totalBaseRewardsPaid, totalBonusRewardsPaid, total);
     }
 
-    function availableRewards() external view returns(uint256 base, uint256 bonus){
-       return (rewardsManagerBaseRewardBalance, rewardsManagerBonusBalance);
+    function availableRewards() external view returns (uint256 base, uint256 bonus) {
+        return (rewardsManagerBaseRewardBalance, rewardsManagerBonusBalance);
     }
 
     function calculateMisplacedJudge() public view returns (uint256) {
         uint256 contractBalance = judgeToken.balanceOf(address(this));
         uint256 totalAccountedRewardsBalance = rewardsManagerBaseRewardBalance + rewardsManagerBonusBalance;
-        uint256 misplacedJudgeAmount = contractBalance > totalAccountedRewardsBalance ? contractBalance - totalAccountedRewardsBalance : 0;
+        uint256 misplacedJudgeAmount =
+            contractBalance > totalAccountedRewardsBalance ? contractBalance - totalAccountedRewardsBalance : 0;
         return misplacedJudgeAmount;
     }
 
@@ -205,15 +207,15 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         onlyRole(TOKEN_RECOVERY_ROLE)
         nonReentrant
     {
-        if(address(judgeTreasury) == address(0)) revert JudgeTreasuryNotSet();
+        if (address(judgeTreasury) == address(0)) revert JudgeTreasuryNotSet();
         uint256 misplacedJudgeAmount = calculateMisplacedJudge();
-        if(_amount > misplacedJudgeAmount) revert InvalidAmount();
-        if(_amount < judgeRecoveryMinimumThreshold) revert NotUpToThreshold();
+        if (_amount > misplacedJudgeAmount) revert InvalidAmount();
+        if (_amount < judgeRecoveryMinimumThreshold) revert NotUpToThreshold();
         uint256 refund = (_amount * (100 - uint256(feePercent))) / 100;
         uint256 fee = _amount - refund;
-        if(fee > 0){
-        judgeToken.transfer(address(judgeTreasury), fee);
-        judgeTreasury.increaseTreasuryPreciseBalance(fee);
+        if (fee > 0) {
+            judgeToken.transfer(address(judgeTreasury), fee);
+            judgeTreasury.increaseTreasuryPreciseBalance(fee);
         }
         judgeToken.transfer(_to, refund);
         emit JudgeTokenRecovered(_to, refund, fee);
@@ -226,14 +228,14 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         onlyRole(TOKEN_RECOVERY_ROLE)
         nonReentrant
     {
-        if(_strandedTokenAddr == address(0) || _addr == address(0)) revert InvalidAddress();
-        if(_strandedTokenAddr == address(judgeToken)) revert JudgeTokenRecoveryNotAllowed();
-        if(_amount > IERC20(_strandedTokenAddr).balanceOf(address(this))) revert InsufficientContractBalance();
+        if (_strandedTokenAddr == address(0) || _addr == address(0)) revert InvalidAddress();
+        if (_strandedTokenAddr == address(judgeToken)) revert JudgeTokenRecoveryNotAllowed();
+        if (_amount > IERC20(_strandedTokenAddr).balanceOf(address(this))) revert InsufficientContractBalance();
 
         uint256 refund = (_amount * (100 - uint256(feePercent))) / 100;
         uint256 fee = _amount - refund;
-        if(fee > 0){
-        feeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
+        if (fee > 0) {
+            feeBalanceOfStrandedToken[_strandedTokenAddr] += fee;
         }
         IERC20(_strandedTokenAddr).safeTransfer(_addr, refund);
         emit Erc20Recovered(_strandedTokenAddr, _addr, refund, fee);
@@ -246,9 +248,9 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         onlyRole(FUND_MANAGER_ROLE)
         nonReentrant
     {
-        if(_strandedTokenAddr == address(0) || _to == address(0)) revert InvalidAddress();
-        if(_strandedTokenAddr == address(judgeToken)) revert JudgeTokenRecoveryNotAllowed();
-        if(_amount > feeBalanceOfStrandedToken[_strandedTokenAddr]) revert InsufficientBalance();
+        if (_strandedTokenAddr == address(0) || _to == address(0)) revert InvalidAddress();
+        if (_strandedTokenAddr == address(judgeToken)) revert JudgeTokenRecoveryNotAllowed();
+        if (_amount > feeBalanceOfStrandedToken[_strandedTokenAddr]) revert InsufficientBalance();
 
         feeBalanceOfStrandedToken[_strandedTokenAddr] -= _amount;
         IERC20(_strandedTokenAddr).safeTransfer(_to, _amount);

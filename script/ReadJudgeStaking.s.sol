@@ -5,11 +5,10 @@ import "forge-std/Script.sol";
 import "../src/JudgeToken.sol";
 import "../src/JudgeStaking.sol";
 
-contract ReadJudgeStaking is Script{
-    
+contract ReadJudgeStaking is Script {
     JudgeStaking staking;
 
-    function run() external{
+    function run() external {
         address stakingAddr = vm.envAddress("STAKING_ADDRESS");
 
         staking = JudgeStaking(stakingAddr);
