@@ -330,19 +330,14 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         rewardsPerBlockForQuarter[quarterIndex] = rpb;
     }
 
-    function updatePool() public {
-        uint32 currentQuarterIndex = getCurrentQuarterIndex();
-        uint256 blockNum = block.number;
-
-        if (blockNum <= lastRewardBlock) return;
-        uint256 localTotalStakeWeight = totalStakeWeight;
-        if (localTotalStakeWeight == 0) {
-            lastRewardBlock = blockNum;
-            return;
-        }
-
+    function _processQuarters(
+        uint32 currentQuarterIndex,
+        uint256 blockNum,
+        uint256 localTotalStakeWeight
+    ) internal {
         uint32 startQuarter = getQuarterIndexFromBlock(lastRewardBlock);
         uint32 processed = 0;
+
         while (
             startQuarter <= currentQuarterIndex &&
             processed < MAX_UPDATE_QUARTERS
@@ -356,10 +351,10 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             uint256 quarterEnd = quarterStart + QUARTER_BLOCKS;
             uint256 startQuarterBonusEnd = q.bonusEndBlock;
 
-            uint256 rpb = rewardsPerBlockForQuarter[startQuarter];
-            uint256 bpb = bonusPerBlockForQuarter[startQuarter];
-
-            if (rpb == 0 && bpb == 0) {
+            if (
+                rewardsPerBlockForQuarter[startQuarter] == 0 &&
+                bonusPerBlockForQuarter[startQuarter] == 0
+            ) {
                 unchecked {
                     startQuarter++;
                     processed++;
@@ -373,7 +368,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
             if (endBlock > lastRewardBlock) {
                 uint256 blocksPassed = endBlock - lastRewardBlock;
-                uint256 reward = blocksPassed * rpb;
+                uint256 reward = blocksPassed *
+                    rewardsPerBlockForQuarter[startQuarter];
                 accJudgePerShare += Math.mulDiv(
                     reward,
                     SCALE,
@@ -387,7 +383,11 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                         startQuarterBonusEnd - lastRewardBlock
                     );
                 }
-                uint256 bonusReward = Math.mulDiv(bonusBlocks, bpb, SCALE);
+                uint256 bonusReward = Math.mulDiv(
+                    bonusBlocks,
+                    bonusPerBlockForQuarter[startQuarter],
+                    SCALE
+                );
                 accBonusJudgePerShare += Math.mulDiv(
                     bonusReward,
                     SCALE,
@@ -406,6 +406,19 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                 processed++;
             }
         }
+    }
+
+    function updatePool() public {
+        uint32 currentQuarterIndex = getCurrentQuarterIndex();
+        uint256 blockNum = block.number;
+
+        if (blockNum <= lastRewardBlock) return;
+        uint256 localTotalStakeWeight = totalStakeWeight;
+        if (localTotalStakeWeight == 0) {
+            lastRewardBlock = blockNum;
+            return;
+        }
+        _processQuarters(currentQuarterIndex, blockNum, localTotalStakeWeight);
     }
 
     function poolHasStaleQuarters() public view returns (bool) {
@@ -760,79 +773,98 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         return userStakes[msg.sender][_index];
     }
 
+    function _simulateAccPerShareValues(
+        uint256 tempAccJudgePerShare,
+        uint256 tempAccBonusJudgePerShare,
+        uint256 localLastRewardBlock
+    )
+        internal
+        view
+        returns (uint256 newAccJudgePerShare, uint256 newAccBonusJudgePerShare)
+    {
+        if (block.number <= localLastRewardBlock || totalStakeWeight == 0) {
+            return (tempAccJudgePerShare, tempAccBonusJudgePerShare);
+        }
+
+        uint32 startQuarter = getQuarterIndexFromBlock(localLastRewardBlock);
+        uint8 processed = 0;
+        uint32 currentQuarter = getCurrentQuarterIndex();
+
+        while (
+            startQuarter <= currentQuarter && processed < MAX_SIMULATED_QUARTERS
+        ) {
+            JudgeTreasury.QuarterInfo memory q = judgeTreasury.getQuarterInfo(
+                startQuarter
+            );
+            uint256 quarterEnd = stakingPoolStartBlock +
+                ((uint256(startQuarter) - 1) * QUARTER_BLOCKS) +
+                QUARTER_BLOCKS;
+
+            if (
+                rewardsPerBlockForQuarter[startQuarter] == 0 &&
+                bonusPerBlockForQuarter[startQuarter] == 0
+            ) {
+                unchecked {
+                    startQuarter++;
+                    processed++;
+                    continue;
+                }
+            }
+
+            uint256 endBlock = (startQuarter == currentQuarter)
+                ? block.number
+                : quarterEnd;
+            if (endBlock > localLastRewardBlock) {
+                uint256 reward = (endBlock - localLastRewardBlock) *
+                    rewardsPerBlockForQuarter[startQuarter];
+                tempAccJudgePerShare += Math.mulDiv(
+                    reward,
+                    SCALE,
+                    totalStakeWeight
+                );
+
+                uint256 bonusBlocks = 0;
+                if (q.bonusEndBlock > localLastRewardBlock) {
+                    bonusBlocks = Math.min(
+                        endBlock - localLastRewardBlock,
+                        q.bonusEndBlock - localLastRewardBlock
+                    );
+                }
+
+                uint256 bonusReward = Math.mulDiv(
+                    bonusBlocks,
+                    bonusPerBlockForQuarter[startQuarter],
+                    SCALE
+                );
+                tempAccBonusJudgePerShare += Math.mulDiv(
+                    bonusReward,
+                    SCALE,
+                    totalStakeWeight
+                );
+                localLastRewardBlock = endBlock;
+            }
+            unchecked {
+                startQuarter++;
+                processed++;
+            }
+        }
+
+        return (tempAccJudgePerShare, tempAccBonusJudgePerShare);
+    }
+
     function viewMyPendingRewards(
         uint16 _index
     ) external view validIndex(_index) returns (uint256) {
         UserStake memory stake = userStakes[msg.sender][_index];
-        uint256 tempAccJudgePerShare = accJudgePerShare;
-        uint256 tempAccBonusJudgePerShare = accBonusJudgePerShare;
-        uint256 localLastRewardBlock = lastRewardBlock;
 
-        if (block.number > localLastRewardBlock && totalStakeWeight > 0) {
-            uint32 startQuarter = getQuarterIndexFromBlock(
-                localLastRewardBlock
+        (
+            uint256 tempAccJudgePerShare,
+            uint256 tempAccBonusJudgePerShare
+        ) = _simulateAccPerShareValues(
+                accJudgePerShare,
+                accBonusJudgePerShare,
+                lastRewardBlock
             );
-
-            uint8 processed = 0;
-            while (
-                startQuarter <= getCurrentQuarterIndex() &&
-                processed < MAX_SIMULATED_QUARTERS
-            ) {
-                JudgeTreasury.QuarterInfo memory q = judgeTreasury
-                    .getQuarterInfo(startQuarter);
-                uint256 quarterEnd = stakingPoolStartBlock +
-                    ((uint256(startQuarter) - 1) * QUARTER_BLOCKS) +
-                    QUARTER_BLOCKS;
-
-                if (
-                    rewardsPerBlockForQuarter[startQuarter] == 0 &&
-                    bonusPerBlockForQuarter[startQuarter] == 0
-                ) {
-                    unchecked {
-                        startQuarter++;
-                        processed++;
-                        continue;
-                    }
-                }
-
-                uint256 endBlock = (startQuarter == getCurrentQuarterIndex())
-                    ? block.number
-                    : quarterEnd;
-                if (endBlock > localLastRewardBlock) {
-                    uint256 reward = (endBlock - localLastRewardBlock) *
-                        rewardsPerBlockForQuarter[startQuarter];
-                    tempAccJudgePerShare += Math.mulDiv(
-                        reward,
-                        SCALE,
-                        totalStakeWeight
-                    );
-
-                    uint256 bonusBlocks = 0;
-                    if (q.bonusEndBlock > localLastRewardBlock) {
-                        bonusBlocks = Math.min(
-                            endBlock - localLastRewardBlock,
-                            q.bonusEndBlock - localLastRewardBlock
-                        );
-                    }
-
-                    uint256 bonusReward = Math.mulDiv(
-                        bonusBlocks,
-                        bonusPerBlockForQuarter[startQuarter],
-                        SCALE
-                    );
-                    tempAccBonusJudgePerShare += Math.mulDiv(
-                        bonusReward,
-                        SCALE,
-                        totalStakeWeight
-                    );
-                    localLastRewardBlock = endBlock;
-                }
-                unchecked {
-                    startQuarter++;
-                    processed++;
-                }
-            }
-        }
 
         uint256 newLocalAcc = Math.mulDiv(
             stake.stakeWeight,
