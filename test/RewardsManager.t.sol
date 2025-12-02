@@ -63,6 +63,7 @@ contract RewardsManagerTest is Test {
         bytes32 rewardsPerBlockAdmin = judgeStaking
             .REWARDS_PER_BLOCK_CALCULATOR();
         bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
+        bytes32 rewardsDistributor = rewardsManager.REWARDS_DISTRIBUTOR_ROLE();
         rewardsManager.grantRole(
             rewardsManagerPrecisebalanceUpdater,
             address(judgeTreasury)
@@ -71,6 +72,7 @@ contract RewardsManagerTest is Test {
         judgeTreasury.grantRole(treasuryAdmin, owner);
         judgeStaking.grantRole(stakingAdmin, owner);
         judgeStaking.grantRole(rewardsPerBlockAdmin, address(judgeTreasury));
+        rewardsManager.grantRole(rewardsDistributor, address(judgeStaking));
         judgeStaking.setRewardsManagerAddress(address(rewardsManager));
         judgeStaking.setJudgeTreasuryAddress(address(judgeTreasury));
 
@@ -198,7 +200,64 @@ contract RewardsManagerTest is Test {
 
     function testSendRewards() public {}
 
-    function testTotalRewardsPaid() public {}
+    function testTotalRewardsPaid() public {
+        uint256 rewards = 972_000 * 10 ** uint256(decimals);
+        uint256 bonus = 200_000 * 10 ** uint256(decimals);
+        uint256 bonusDuration = 100_000;
+        uint256 startBlock = judgeStaking.stakingPoolStartBlock();
+        judgeToken.generalMint(user1, 270_000 * 10 ** uint256(decimals));
+        vm.startPrank(user1);
+        judgeToken.transfer(user2, 20_0000 * 10 ** uint256(decimals));
+        judgeToken.approve(
+            address(judgeStaking),
+            50_000 * 10 ** uint256(decimals)
+        );
+        judgeStaking.deposit(50_000 * 10 ** uint256(decimals), 180);
+        vm.stopPrank();
+
+        vm.startPrank(user2);
+        judgeToken.approve(
+            address(judgeStaking),
+            20_000 * 10 ** uint256(decimals)
+        );
+        judgeStaking.deposit(20_000 * 10 ** uint256(decimals), 180);
+        vm.stopPrank();
+
+        judgeTreasury.setNewQuarterlyRewards(rewards);
+        bytes32 fundManagerAdminTreasury = judgeTreasury.FUND_MANAGER_ROLE();
+        judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
+        judgeTreasury.fundRewardsManager(1);
+        vm.roll(startBlock + 324_000);
+
+        vm.prank(user1);
+        judgeStaking.claimRewards(0);
+
+        (uint256 base, uint256 bonusClaimed, uint256 total) = rewardsManager
+            .totalRewardsPaid();
+
+        assertApproxEqRel(base, 347142e18, 9e17);
+        assertEq(bonusClaimed, 0);
+        assertApproxEqRel(total, 347142e18, 9e17);
+
+        vm.startPrank(user1);
+        judgeToken.approve(
+            address(judgeTreasury),
+            200_000 * 10 ** uint256(decimals)
+        );
+        judgeTreasury.addBonusToQuarterReward(bonus, bonusDuration);
+
+        vm.roll(startBlock + 374_000);
+        judgeStaking.claimRewards(0);
+        vm.stopPrank();
+        vm.prank(user2);
+        judgeStaking.claimRewards(0);
+
+        (uint256 newBase, uint256 newBonus, uint256 newTotal) = rewardsManager
+            .totalRewardsPaid();
+        assertApproxEqRel(newBase, 560_999e18, 1e18);
+        assertApproxEqRel(newBonus, 100_000e18, 1e6);
+        assertApproxEqRel(newTotal, 660_999e18, 1e18);
+    }
 
     function testAvailableRewards() public {}
 
