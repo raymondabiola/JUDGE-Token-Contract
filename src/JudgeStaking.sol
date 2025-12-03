@@ -355,6 +355,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                 rewardsPerBlockForQuarter[startQuarter] == 0 &&
                 bonusPerBlockForQuarter[startQuarter] == 0
             ) {
+                settings.lastFullyUpdatedQuarter = startQuarter;
+                lastRewardBlock = blockNum;
                 unchecked {
                     startQuarter++;
                     processed++;
