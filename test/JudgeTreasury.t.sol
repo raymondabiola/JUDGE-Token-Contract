@@ -455,13 +455,62 @@ contract JudgeTreasuryTest is Test {
         );
     }
 
-    function testRemainingStakingAllocation() public {}
+    function testRemainingStakingAllocation() public {
+        uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
+        uint256 startBlock = judgeStaking.stakingPoolStartBlock();
+        judgeToken.generalMint(user1, 270_000 * 10 ** uint256(decimals));
+        vm.warp(startBlock);
+        judgeTreasury.setNewQuarterlyRewards(rewards);
+        bytes32 fundManagerAdminTreasury = judgeTreasury.FUND_MANAGER_ROLE();
+        judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
+        judgeTreasury.fundRewardsManager(1);
 
-    function testRemainingTeamAllocation() public {}
+        assertEq(judgeTreasury.remainingStakingAllocation(), 49_000_000e18);
+    }
 
-    function testCurrentFeePercent() public {}
+    function testRemainingTeamAllocation() public {
+        uint256 teamFundAmount = 20_000_000 * 10 ** uint256(decimals);
+        uint256 startBlock = judgeStaking.stakingPoolStartBlock();
+        vm.warp(startBlock);
+        bytes32 fundManagerAdminTreasury = judgeTreasury.FUND_MANAGER_ROLE();
+        judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
+        judgeTreasury.fundTeamDevelopment(user1, teamFundAmount);
 
-    function testGetQuarterInfo() public {}
+        assertEq(judgeTreasury.remainingTeamAllocation(), 30_000_000e18);
+    }
+
+    function testCurrentFeePercent() public {
+        assertEq(judgeTreasury.currentFeePercent(), 10);
+        judgeTreasury.updateFeePercent(0);
+        assertEq(judgeTreasury.currentFeePercent(), 0);
+    }
+
+    function testGetQuarterInfo() public {
+        uint256 rewards = 1_000_000 * 10 ** uint256(decimals);
+        uint256 bonus = 200_000 * 10 ** uint256(decimals);
+        uint256 bonusDuration = 100_000;
+        uint256 startBlock = judgeStaking.stakingPoolStartBlock();
+        judgeToken.generalMint(user1, 270_000 * 10 ** uint256(decimals));
+        vm.warp(startBlock);
+        judgeTreasury.setNewQuarterlyRewards(rewards);
+        bytes32 fundManagerAdminTreasury = judgeTreasury.FUND_MANAGER_ROLE();
+        judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
+        judgeTreasury.fundRewardsManager(1);
+        vm.roll(startBlock + 324_000);
+
+        vm.startPrank(user1);
+        judgeToken.approve(
+            address(judgeTreasury),
+            200_000 * 10 ** uint256(decimals)
+        );
+        judgeTreasury.addBonusToQuarterReward(bonus, bonusDuration);
+
+        JudgeTreasury.QuarterInfo memory q = judgeTreasury.getQuarterInfo(1);
+        assertEq(q.baseReward, 1_000_000e18);
+        assertEq(q.bonus, 200_000e18);
+        assertEq(q.bonusEndBlock, startBlock + 424_000);
+        assertTrue(q.isFunded);
+    }
 
     function testCalculateMisplacedJudge() public {
         bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
