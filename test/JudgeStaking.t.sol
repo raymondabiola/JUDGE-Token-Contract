@@ -262,16 +262,22 @@ contract JudgeStakingTest is Test {
         judgeStaking.grantRole(stakingAdmin, owner);
 
         vm.roll(poolStartBlock);
+
         judgeTreasury.setNewQuarterlyRewards(firstQuarterRewards);
         judgeTreasury.fundRewardsManager(1);
 
+        assertEq(judgeStaking.getCurrentApr(), 0);
+
+        vm.roll(poolStartBlock + 100_000);
+
         uint256 assumedTotalStakeWeight = 10_000_000 * 10 ** uint256(decimals);
-        uint256 rewardsPerBlock = judgeStaking.rewardsPerBlockForQuarter(1);
         vm.store(
             address(judgeStaking),
-            bytes32(uint256(12)),
+            bytes32(uint256(9)),
             bytes32(assumedTotalStakeWeight)
         );
+
+        uint256 rewardsPerBlock = judgeStaking.rewardsPerBlockForQuarter(1);
         uint256 blocksPerYear = 365 days / 12;
         uint256 apr1 = (rewardsPerBlock * blocksPerYear * 1e18) /
             assumedTotalStakeWeight;
@@ -1173,11 +1179,21 @@ contract JudgeStakingTest is Test {
 
         vm.roll(poolStartBlock + 80_000);
 
-        uint256 accruedRewards = judgeStaking.rewardsPerBlockForQuarter(1) *
-            80_000;
-        uint256 accruedBonus = judgeStaking.bonusPerBlockForQuarter(1) * 78_000;
+        vm.prank(user1);
+        judgeStaking.claimRewards(1);
+
+        uint256 accruedRewards = judgeStaking.totalAccruedBaseRewards();
+        uint256 accruedBonus = judgeStaking.totalAccruedBonusRewards();
+        uint256 claimedBaseRewards = judgeStaking.totalClaimedBaseRewards();
+        uint256 claimedBonusRewards = judgeStaking.totalClaimedBonusRewards();
         (, , uint256 total) = judgeStaking.totalUnclaimedRewards();
-        assertEq(total, accruedRewards + accruedBonus);
+        assertEq(
+            total,
+            accruedRewards -
+                claimedBaseRewards +
+                accruedBonus -
+                claimedBonusRewards
+        );
     }
 
     function testViewMyStakes() public {
