@@ -100,7 +100,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error QuarterAllocationAlreadyFunded();
     error DurationBeyondQuarterEnd();
     error DurationTooLow();
-    error StakingPoolNotUpToDate();
 
     constructor(
         address _judgeTokenAddress,
@@ -231,7 +230,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         if (!quarters[currentQuarterIndex].isFunded) {
             revert CurrentQuarterAllocationNotYetFunded();
         }
-        if (!judgeStaking.isPoolUpToDate()) revert StakingPoolNotUpToDate();
         if (_durationInBlocks < 100_000) revert DurationTooLow();
         if (_durationInBlocks > quarterEnd - b) {
             revert DurationBeyondQuarterEnd();
@@ -250,7 +248,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
         judgeToken.transferFrom(msg.sender, address(rewardsManager), _bonus);
         rewardsManager.increaseRewardsManagerBonusBalanceAccounting(_bonus);
-        judgeStaking.updatePool();
         judgeStaking.syncQuarterBonusRewardsPerBlock(
             currentQuarterIndex,
             _bonus,
@@ -283,8 +280,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         );
 
         quarters[_index].isFunded = true;
-
-        judgeStaking.updatePool();
 
         judgeStaking.syncQuarterRewardsPerBlock(_index);
 

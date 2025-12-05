@@ -1014,37 +1014,25 @@ contract JudgeStakingTest is Test {
         judgeToken.approve(address(judgeTreasury), bonus);
         judgeTreasury.addBonusToQuarterReward(bonus, 200_000);
 
-        uint256 accJudgePerShareAFter2000Blocks = Math.mulDiv(
-            2000,
-            Math.mulDiv(1_000_000 * 10 ** uint256(decimals), 1e18, 648_000),
-            user1Stake1StakeWeight
-        );
-        console.log(
-            "accJudgePerShareAfter2000Blocks",
-            accJudgePerShareAFter2000Blocks
-        );
-
-        vm.roll(poolStartBlock + 2500);
+        vm.roll(poolStartBlock + 3000);
         vm.prank(user1);
         judgeStaking.deposit(40_000 * 10 ** uint256(decimals), lockUpPeriod2);
         uint256 user1Stake2StakeWeight = Math.mulDiv(4e22, 360, 360);
 
-        vm.roll(poolStartBlock + 3000);
-
         uint256 accJudgePerShareAFter3000Blocks = (
             Math.mulDiv(
-                1_000,
+                3_000,
                 Math.mulDiv(1_000_000 * 10 ** uint256(decimals), 1e18, 648_000),
-                user1Stake1StakeWeight + user1Stake2StakeWeight
+                user1Stake1StakeWeight
             )
-        ) + accJudgePerShareAFter2000Blocks;
+        );
         uint256 accBonusJudgePerShareAfter3000Blocks = Math.mulDiv(
             1_000,
             Math.mulDiv(100_000 * 10 ** uint256(decimals), 1e18, 200_000),
-            user1Stake1StakeWeight + user1Stake2StakeWeight
+            user1Stake1StakeWeight
         );
 
-        vm.roll(poolStartBlock + 3500);
+        vm.roll(poolStartBlock + 4000);
         vm.startPrank(user2);
         judgeToken.approve(address(judgeStaking), amount);
         judgeStaking.deposit(60_000 * 10 ** uint256(decimals), lockUpPeriod2);
@@ -1052,14 +1040,11 @@ contract JudgeStakingTest is Test {
         uint256 balanceOfUser2AfterDeposit = judgeToken.balanceOf(user2);
         vm.stopPrank();
 
-        vm.roll(poolStartBlock + 4000);
         uint256 accJudgePerShareAFter4000Blocks = (
             Math.mulDiv(
                 1_000,
                 Math.mulDiv(1_000_000 * 10 ** uint256(decimals), 1e18, 648_000),
-                user1Stake1StakeWeight +
-                    user1Stake2StakeWeight +
-                    user2Stake1StakeWeight
+                user1Stake1StakeWeight + user1Stake2StakeWeight
             )
         ) + accJudgePerShareAFter3000Blocks;
 
@@ -1067,9 +1052,7 @@ contract JudgeStakingTest is Test {
             Math.mulDiv(
                 1_000,
                 Math.mulDiv(100_000 * 10 ** uint256(decimals), 1e18, 200_000),
-                user1Stake1StakeWeight +
-                    user1Stake2StakeWeight +
-                    user2Stake1StakeWeight
+                user1Stake1StakeWeight + user1Stake2StakeWeight
             )
         ) + accBonusJudgePerShareAfter3000Blocks;
         console.log(
@@ -1082,20 +1065,7 @@ contract JudgeStakingTest is Test {
         uint256 totalStakeWeight = user1Stake1StakeWeight +
             user1Stake2StakeWeight +
             user2Stake1StakeWeight;
-        uint256 accJudgePerShareAFter80000Blocks = Math.mulDiv(
-            76_000,
-            Math.mulDiv(1_000_000 * 10 ** uint256(decimals), 1e18, 648_000),
-            totalStakeWeight
-        ) + accJudgePerShareAFter4000Blocks;
-        uint256 accBonusJudgePerShareAfter80000Blocks = Math.mulDiv(
-            76_000,
-            Math.mulDiv(100_000 * 10 ** uint256(decimals), 1e18, 200_000),
-            totalStakeWeight
-        ) + accBonusJudgePerShareAfter4000Blocks;
-        console.log(
-            "accBonusJudgePerShareAfter80000Blocks",
-            accBonusJudgePerShareAfter80000Blocks
-        );
+
         vm.expectRevert(InvalidAmount.selector);
         vm.prank(user2);
         judgeStaking.earlyWithdraw(0, 0);
@@ -1114,6 +1084,23 @@ contract JudgeStakingTest is Test {
 
         vm.prank(user2);
         judgeStaking.earlyWithdraw(50_000 * 10 ** uint256(decimals), 0);
+
+        uint256 accJudgePerShareAFter80000Blocks = Math.mulDiv(
+            76_000,
+            Math.mulDiv(1_000_000 * 10 ** uint256(decimals), 1e18, 648_000),
+            totalStakeWeight
+        ) + accJudgePerShareAFter4000Blocks;
+
+        uint256 accBonusJudgePerShareAfter80000Blocks = Math.mulDiv(
+            76_000,
+            Math.mulDiv(100_000 * 10 ** uint256(decimals), 1e18, 200_000),
+            totalStakeWeight
+        ) + accBonusJudgePerShareAfter4000Blocks;
+
+        console.log(
+            "accBonusJudgePerShareAfter80000Blocks",
+            accBonusJudgePerShareAfter80000Blocks
+        );
 
         uint256 balanceOfUser2AfterWithdrawal = judgeToken.balanceOf(user2);
         uint256 totalAmountWithdrawn = balanceOfUser2AfterWithdrawal -
@@ -1141,10 +1128,11 @@ contract JudgeStakingTest is Test {
         console.log("user2RewardsExpected", user2RewardsExpected);
         console.log("user2BonusRewardsExpected", user2BonusRewardsExpected);
         uint256 user2WithdrawnDeposit = 50_000 * 10 ** uint256(decimals);
+        uint256 penalty = 5000e18;
         uint256 expectedTotalWithdrawnByUser2 = user2RewardsExpected +
             user2BonusRewardsExpected +
-            user2WithdrawnDeposit;
-        assertEq(totalAmountWithdrawn, expectedTotalWithdrawnByUser2);
+            user2WithdrawnDeposit -
+            penalty;
         assertEq(totalAmountWithdrawn, expectedTotalWithdrawnByUser2);
 
         // Checks if penalty was successfully transferred
