@@ -997,10 +997,10 @@ contract JudgeStakingTest is Test {
         judgeToken.generalMint(user2, amount);
         judgeToken.generalMint(owner, amount);
 
+        vm.roll(poolStartBlock);
+
         vm.prank(user1);
         judgeToken.approve(address(judgeStaking), amount);
-
-        vm.roll(poolStartBlock);
 
         judgeTreasury.setNewQuarterlyRewards(reward);
         judgeTreasury.fundRewardsManager(1);
@@ -1024,56 +1024,64 @@ contract JudgeStakingTest is Test {
             accJudgePerShareAFter2000Blocks
         );
 
-        vm.roll(poolStartBlock + 3000);
+        vm.roll(poolStartBlock + 2500);
         vm.prank(user1);
         judgeStaking.deposit(40_000 * 10 ** uint256(decimals), lockUpPeriod2);
         uint256 user1Stake2StakeWeight = Math.mulDiv(4e22, 360, 360);
+
+        vm.roll(poolStartBlock + 3000);
 
         uint256 accJudgePerShareAFter3000Blocks = (
             Math.mulDiv(
                 1_000,
                 Math.mulDiv(1_000_000 * 10 ** uint256(decimals), 1e18, 648_000),
-                user1Stake1StakeWeight
+                user1Stake1StakeWeight + user1Stake2StakeWeight
             )
         ) + accJudgePerShareAFter2000Blocks;
         uint256 accBonusJudgePerShareAfter3000Blocks = Math.mulDiv(
             1_000,
             Math.mulDiv(100_000 * 10 ** uint256(decimals), 1e18, 200_000),
-            user1Stake1StakeWeight
+            user1Stake1StakeWeight + user1Stake2StakeWeight
         );
 
-        vm.roll(poolStartBlock + 4000);
+        vm.roll(poolStartBlock + 3500);
         vm.startPrank(user2);
         judgeToken.approve(address(judgeStaking), amount);
         judgeStaking.deposit(60_000 * 10 ** uint256(decimals), lockUpPeriod2);
+        uint256 user2Stake1StakeWeight = Math.mulDiv(6e22, 360, 360);
+        uint256 balanceOfUser2AfterDeposit = judgeToken.balanceOf(user2);
         vm.stopPrank();
 
+        vm.roll(poolStartBlock + 4000);
         uint256 accJudgePerShareAFter4000Blocks = (
             Math.mulDiv(
                 1_000,
                 Math.mulDiv(1_000_000 * 10 ** uint256(decimals), 1e18, 648_000),
-                user1Stake1StakeWeight + user1Stake2StakeWeight
+                user1Stake1StakeWeight +
+                    user1Stake2StakeWeight +
+                    user2Stake1StakeWeight
             )
         ) + accJudgePerShareAFter3000Blocks;
+
         uint256 accBonusJudgePerShareAfter4000Blocks = (
             Math.mulDiv(
                 1_000,
                 Math.mulDiv(100_000 * 10 ** uint256(decimals), 1e18, 200_000),
-                user1Stake1StakeWeight + user1Stake2StakeWeight
+                user1Stake1StakeWeight +
+                    user1Stake2StakeWeight +
+                    user2Stake1StakeWeight
             )
         ) + accBonusJudgePerShareAfter3000Blocks;
         console.log(
             "accBonusJudgePerShareAfter4000Blocks",
             accBonusJudgePerShareAfter4000Blocks
         );
-        uint256 user2StakeWeight = Math.mulDiv(6e22, 360, 360);
-        uint256 balanceOfUser2AfterDeposit = judgeToken.balanceOf(user2);
 
         vm.roll(poolStartBlock + 80_000);
 
         uint256 totalStakeWeight = user1Stake1StakeWeight +
             user1Stake2StakeWeight +
-            user2StakeWeight;
+            user2Stake1StakeWeight;
         uint256 accJudgePerShareAFter80000Blocks = Math.mulDiv(
             76_000,
             Math.mulDiv(1_000_000 * 10 ** uint256(decimals), 1e18, 648_000),
@@ -1111,22 +1119,22 @@ contract JudgeStakingTest is Test {
         uint256 totalAmountWithdrawn = balanceOfUser2AfterWithdrawal -
             balanceOfUser2AfterDeposit;
         uint256 user2RewardsExpected = Math.mulDiv(
-            user2StakeWeight,
+            user2Stake1StakeWeight,
             accJudgePerShareAFter80000Blocks,
             1e18
         ) -
             Math.mulDiv(
-                user2StakeWeight,
+                user2Stake1StakeWeight,
                 accJudgePerShareAFter4000Blocks,
                 1e18
             );
         uint256 user2BonusRewardsExpected = Math.mulDiv(
-            user2StakeWeight,
+            user2Stake1StakeWeight,
             accBonusJudgePerShareAfter80000Blocks,
             1e18
         ) -
             Math.mulDiv(
-                user2StakeWeight,
+                user2Stake1StakeWeight,
                 accBonusJudgePerShareAfter4000Blocks,
                 1e18
             );

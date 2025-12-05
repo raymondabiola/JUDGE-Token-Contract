@@ -349,24 +349,27 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                 (uint256(startQuarter) - 1) *
                 QUARTER_BLOCKS;
             uint256 quarterEnd = quarterStart + QUARTER_BLOCKS;
-            uint256 startQuarterBonusEnd = q.bonusEndBlock;
+
+            uint256 endBlock = (startQuarter == currentQuarterIndex)
+                ? blockNum
+                : quarterEnd;
 
             if (
                 rewardsPerBlockForQuarter[startQuarter] == 0 &&
                 bonusPerBlockForQuarter[startQuarter] == 0
             ) {
+                if (endBlock > lastRewardBlock) {
+                    lastRewardBlock = endBlock;
+                }
+
                 settings.lastFullyUpdatedQuarter = startQuarter;
-                lastRewardBlock = blockNum;
+
                 unchecked {
                     startQuarter++;
                     processed++;
                     continue;
                 }
             }
-
-            uint256 endBlock = (startQuarter == currentQuarterIndex)
-                ? blockNum
-                : quarterEnd;
 
             if (endBlock > lastRewardBlock) {
                 uint256 blocksPassed = endBlock - lastRewardBlock;
@@ -378,13 +381,24 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                     localTotalStakeWeight
                 );
 
+                uint256 bonusStart = q.currentBonusStartBlock;
+                uint256 bonusEnd = q.currentBonusEndBlock;
                 uint256 bonusBlocks = 0;
-                if (startQuarterBonusEnd > lastRewardBlock) {
-                    bonusBlocks = Math.min(
-                        blocksPassed,
-                        startQuarterBonusEnd - lastRewardBlock
-                    );
+
+                if (bonusEnd > lastRewardBlock) {
+                    uint256 effectiveStart = lastRewardBlock > bonusStart
+                        ? lastRewardBlock
+                        : bonusStart;
+
+                    uint256 effectiveEnd = endBlock > bonusEnd
+                        ? bonusEnd
+                        : endBlock;
+
+                    if (effectiveEnd > effectiveStart) {
+                        bonusBlocks = effectiveEnd - effectiveStart;
+                    }
                 }
+
                 uint256 bonusReward = Math.mulDiv(
                     bonusBlocks,
                     bonusPerBlockForQuarter[startQuarter],
@@ -826,10 +840,10 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                 );
 
                 uint256 bonusBlocks = 0;
-                if (q.bonusEndBlock > localLastRewardBlock) {
+                if (q.currentBonusEndBlock > localLastRewardBlock) {
                     bonusBlocks = Math.min(
                         endBlock - localLastRewardBlock,
-                        q.bonusEndBlock - localLastRewardBlock
+                        q.currentBonusEndBlock - localLastRewardBlock
                     );
                 }
 

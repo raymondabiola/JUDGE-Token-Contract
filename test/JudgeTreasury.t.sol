@@ -507,8 +507,8 @@ contract JudgeTreasuryTest is Test {
 
         JudgeTreasury.QuarterInfo memory q = judgeTreasury.getQuarterInfo(1);
         assertEq(q.baseReward, 1_000_000e18);
-        assertEq(q.bonus, 200_000e18);
-        assertEq(q.bonusEndBlock, startBlock + 424_000);
+        assertEq(q.currentBonus, 200_000e18);
+        assertEq(q.currentBonusEndBlock, startBlock + 424_000);
         assertTrue(q.isFunded);
     }
 

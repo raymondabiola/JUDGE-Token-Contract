@@ -43,8 +43,10 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     struct QuarterInfo {
         uint256 baseReward;
-        uint256 bonus; //If there are bonus rewards, they can be sent for distribution while setting the number of blocks the bonus will run for
-        uint256 bonusEndBlock;
+        uint256 currentBonus; //If there are bonus rewards, they can be sent for distribution while setting the number of blocks the bonus will run for
+        uint256 currentBonusStartBlock;
+        uint256 currentBonusEndBlock;
+        uint256 totalBonusReceived;
         bool isFunded; // boolean for if baseRewards are funded for that quarter
     }
 
@@ -98,6 +100,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error QuarterAllocationAlreadyFunded();
     error DurationBeyondQuarterEnd();
     error DurationTooLow();
+    error StakingPoolNotUpToDate();
 
     constructor(
         address _judgeTokenAddress,
@@ -228,17 +231,22 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         if (!quarters[currentQuarterIndex].isFunded) {
             revert CurrentQuarterAllocationNotYetFunded();
         }
+        if (!judgeStaking.isPoolUpToDate()) revert StakingPoolNotUpToDate();
         if (_durationInBlocks < 100_000) revert DurationTooLow();
         if (_durationInBlocks > quarterEnd - b) {
             revert DurationBeyondQuarterEnd();
         }
         if (_bonus < _durationInBlocks) revert BonusTooSmall();
-        if (b < quarters[currentQuarterIndex].bonusEndBlock) {
+        if (b < quarters[currentQuarterIndex].currentBonusEndBlock) {
             revert lastBonusStillRunning();
         }
 
-        quarters[currentQuarterIndex].bonus += _bonus;
-        quarters[currentQuarterIndex].bonusEndBlock = b + _durationInBlocks;
+        quarters[currentQuarterIndex].currentBonus = _bonus;
+        quarters[currentQuarterIndex].totalBonusReceived += _bonus;
+        quarters[currentQuarterIndex].currentBonusStartBlock = b;
+        quarters[currentQuarterIndex].currentBonusEndBlock =
+            b +
+            _durationInBlocks;
 
         judgeToken.transferFrom(msg.sender, address(rewardsManager), _bonus);
         rewardsManager.increaseRewardsManagerBonusBalanceAccounting(_bonus);
