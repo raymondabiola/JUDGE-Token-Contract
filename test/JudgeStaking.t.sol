@@ -247,7 +247,11 @@ contract JudgeStakingTest is Test {
         assertEq(judgeStaking.getCurrentQuarterIndex(), 3);
     }
 
+    function testGetQuarterIndexFromBlock() public {}
+
     function testSyncQuarterRewardsPerBlock() public {}
+
+    function testSyncQuarterBonusRewardsPerBlock() public {}
 
     function testGetCurrentApr() public {
         bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
@@ -343,6 +347,58 @@ contract JudgeStakingTest is Test {
             judgeStaking.judgeRecoveryMinimumThreshold(),
             newJudgeRecoveryMinimumThreshold
         );
+    }
+
+    function testUpdatePool() public {}
+
+    function testStaleQuarterUpdateBehaviour() public {}
+
+    function testIsPoolUpToDate() public {}
+
+    function testPoolHasStaleQuarters() public {
+        uint256 reward = 1_000_000 * 10 ** uint256(decimals);
+        uint256 reward2 = 1_250_000 * 10 ** uint256(decimals);
+        uint256 reward3 = 500_000 * 10 ** uint256(decimals);
+        uint256 amount = 100_000 * 10 ** uint256(decimals);
+        uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
+        uint256 depositAmount2 = 35_000 * 10 ** uint256(decimals);
+        uint32 lockUpPeriod = 180;
+        uint32 lockUpPeriod2 = 360;
+        uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
+        judgeToken.generalMint(user1, amount);
+
+        vm.prank(user1);
+        judgeToken.approve(address(judgeStaking), amount);
+        vm.roll(poolStartBlock);
+
+        judgeTreasury.setNewQuarterlyRewards(reward);
+        judgeTreasury.fundRewardsManager(1);
+
+        vm.prank(user1);
+        judgeStaking.deposit(depositAmount, lockUpPeriod);
+        vm.stopPrank();
+
+        vm.roll(poolStartBlock + 600_000);
+
+        vm.startPrank(user1);
+        judgeStaking.deposit(depositAmount2, lockUpPeriod2);
+        assertTrue(!judgeStaking.poolHasStaleQuarters());
+        vm.stopPrank();
+
+        vm.roll(poolStartBlock + 648_001);
+        assertTrue(!judgeStaking.poolHasStaleQuarters());
+
+        judgeTreasury.setNewQuarterlyRewards(reward2);
+        judgeTreasury.fundRewardsManager(2);
+
+        vm.roll(poolStartBlock + 1_296_001);
+        judgeTreasury.setNewQuarterlyRewards(reward3);
+        judgeTreasury.fundRewardsManager(3);
+        assertTrue(judgeStaking.poolHasStaleQuarters());
+
+        vm.roll(poolStartBlock + 1_300_001);
+        judgeStaking.updatePool();
+        assertTrue(!judgeStaking.poolHasStaleQuarters());
     }
 
     function testDeposit() public {
