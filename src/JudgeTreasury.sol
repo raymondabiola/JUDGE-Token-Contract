@@ -217,16 +217,16 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         uint256 stakingStart = judgeStaking.stakingPoolStartBlock();
         uint256 quarterBlocks = judgeStaking.QUARTER_BLOCKS();
 
-        uint256 quarterStart = stakingStart +
+        uint256 quarterStartBlock = stakingStart +
             (uint256(currentQuarterIndex) - 1) *
             quarterBlocks;
-        uint256 quarterEnd = quarterStart + quarterBlocks;
+        uint256 quarterEndBlock = quarterStartBlock + quarterBlocks;
         uint256 b = block.number;
         if (!quarters[currentQuarterIndex].isFunded) {
             revert CurrentQuarterAllocationNotYetFunded();
         }
         if (_durationInBlocks < 100_000) revert DurationTooLow();
-        if (_durationInBlocks > quarterEnd - b) {
+        if (_durationInBlocks > quarterEndBlock - b) {
             revert DurationBeyondQuarterEnd();
         }
         if (_bonus < _durationInBlocks) revert BonusTooSmall();

@@ -9,10 +9,19 @@ import {ERC20Capped} from "../lib/openzeppelin-contracts/contracts/token/ERC20/e
 import {ERC20Votes} from "../lib/openzeppelin-contracts/contracts/token/ERC20/extensions/ERC20Votes.sol";
 import {Nonces} from "../lib/openzeppelin-contracts/contracts/utils/Nonces.sol";
 
-contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessControl, ERC20Capped {
+contract JudgeToken is
+    ERC20,
+    ERC20Burnable,
+    ERC20Permit,
+    ERC20Votes,
+    AccessControl,
+    ERC20Capped
+{
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-    bytes32 public constant ALLOCATION_MINTER_ROLE = keccak256("ALLOCATION_MINTER_ROLE"); //Grant role to JudgeTreasury contract during deployment
-    uint256 public immutable MAX_STAKING_REWARD_ALLOCATION = 50_000_000 * 10 ** 18;
+    bytes32 public constant ALLOCATION_MINTER_ROLE =
+        keccak256("ALLOCATION_MINTER_ROLE"); //Grant role to JudgeTreasury contract during deployment
+    uint256 public immutable MAX_STAKING_REWARD_ALLOCATION =
+        50_000_000 * 10 ** 18;
     uint256 public immutable MAX_TEAM_ALLOCATION = 50_000_000 * 10 ** 18;
     uint256 public mintableUnallocatedJudge;
     uint256 public mintableAllocatedJudge;
@@ -23,7 +32,9 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
     error AmountExceedsMintableAllocatedJudge();
     error InitialMintExceedsLimit();
 
-    constructor(uint256 initialSupply)
+    constructor(
+        uint256 initialSupply
+    )
         ERC20("JudgeToken", "JUDGE")
         ERC20Capped(500_000_000 * 10 ** decimals())
         ERC20Permit("JudgeToken")
@@ -35,8 +46,14 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
         _grantRole(MINTER_ROLE, msg.sender);
         _mint(msg.sender, initialSupply);
 
-        mintableUnallocatedJudge = cap() - MAX_STAKING_REWARD_ALLOCATION - MAX_TEAM_ALLOCATION - initialSupply;
-        mintableAllocatedJudge = MAX_STAKING_REWARD_ALLOCATION + MAX_TEAM_ALLOCATION;
+        mintableUnallocatedJudge =
+            cap() -
+            MAX_STAKING_REWARD_ALLOCATION -
+            MAX_TEAM_ALLOCATION -
+            initialSupply;
+        mintableAllocatedJudge =
+            MAX_STAKING_REWARD_ALLOCATION +
+            MAX_TEAM_ALLOCATION;
         emit Minted(msg.sender, msg.sender, initialSupply);
     }
 
@@ -58,28 +75,43 @@ contract JudgeToken is ERC20, ERC20Burnable, ERC20Permit, ERC20Votes, AccessCont
         }
     }
 
-    function generalMint(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
+    function generalMint(
+        address to,
+        uint256 amount
+    ) external onlyRole(MINTER_ROLE) {
         decreaseMintableUnallocatedJudge(amount);
         _mint(to, amount);
         emit Minted(msg.sender, to, amount);
     }
 
-    // Default admin should grant the allocation_minter role only to judgeTreasury
-    function mintFromAllocation(address to, uint256 amount) external onlyRole(ALLOCATION_MINTER_ROLE) {
+    // Default admin should grant the allocation_minter role exclusively to judgeTreasury
+    function mintFromAllocation(
+        address to,
+        uint256 amount
+    ) external onlyRole(ALLOCATION_MINTER_ROLE) {
         decreaseMintableAllocatedJudge(amount);
         _mint(to, amount);
         emit Minted(msg.sender, to, amount);
     }
 
-    function setRoleAdmin(bytes32 role, bytes32 adminRole) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function setRoleAdmin(
+        bytes32 role,
+        bytes32 adminRole
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _setRoleAdmin(role, adminRole);
     }
 
-    function _update(address from, address to, uint256 value) internal override(ERC20, ERC20Capped, ERC20Votes) {
+    function _update(
+        address from,
+        address to,
+        uint256 value
+    ) internal override(ERC20, ERC20Capped, ERC20Votes) {
         super._update(from, to, value);
     }
 
-    function nonces(address owner) public view override(ERC20Permit, Nonces) returns (uint256) {
+    function nonces(
+        address owner
+    ) public view override(ERC20Permit, Nonces) returns (uint256) {
         return super.nonces(owner);
     }
 }

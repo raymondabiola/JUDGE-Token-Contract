@@ -22,7 +22,7 @@ contract JudgeTreasuryTest is Test {
     address public zeroAddress;
     uint8 private decimals = 18;
     uint256 public initialSupply = 100_000 * 10 ** uint256(decimals);
-    uint8 public earlyWithdrawalPercent = 10;
+    uint8 public earlyWithdrawalPercentForMaxLockUp = 10;
 
     error EOANotAllowed();
     error InvalidAddress();
@@ -50,7 +50,7 @@ contract JudgeTreasuryTest is Test {
         rewardsManager = new RewardsManager(address(judgeToken));
         judgeStaking = new JudgeStaking(
             address(judgeToken),
-            earlyWithdrawalPercent
+            earlyWithdrawalPercentForMaxLockUp
         );
         judgeTreasury = new JudgeTreasury(
             address(judgeToken),

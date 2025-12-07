@@ -345,14 +345,14 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             JudgeTreasury.QuarterInfo memory q = judgeTreasury.getQuarterInfo(
                 startQuarter
             );
-            uint256 quarterStart = stakingPoolStartBlock +
+            uint256 quarterStartBlock = stakingPoolStartBlock +
                 (uint256(startQuarter) - 1) *
                 QUARTER_BLOCKS;
-            uint256 quarterEnd = quarterStart + QUARTER_BLOCKS;
+            uint256 quarterEndBlock = quarterStartBlock + QUARTER_BLOCKS;
 
             uint256 endBlock = (startQuarter == currentQuarterIndex)
                 ? blockNum
-                : quarterEnd;
+                : quarterEndBlock;
 
             if (
                 rewardsPerBlockForQuarter[startQuarter] == 0 &&
@@ -451,7 +451,12 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     function deposit(
         uint256 _amount,
         uint32 _lockUpPeriodInDays
-    ) external validAmount(_amount) validAmount(_lockUpPeriodInDays) {
+    )
+        external
+        validAmount(_amount)
+        validAmount(_lockUpPeriodInDays)
+        nonReentrant
+    {
         if (_lockUpPeriodInDays > MAX_LOCK_UP_PERIOD_DAYS) {
             revert InvalidLockUpPeriod();
         }
@@ -812,7 +817,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             JudgeTreasury.QuarterInfo memory q = judgeTreasury.getQuarterInfo(
                 startQuarter
             );
-            uint256 quarterEnd = stakingPoolStartBlock +
+            uint256 quarterEndBlock = stakingPoolStartBlock +
                 ((uint256(startQuarter) - 1) * QUARTER_BLOCKS) +
                 QUARTER_BLOCKS;
 
@@ -829,7 +834,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
             uint256 endBlock = (startQuarter == currentQuarter)
                 ? block.number
-                : quarterEnd;
+                : quarterEndBlock;
             if (endBlock > localLastRewardBlock) {
                 uint256 reward = (endBlock - localLastRewardBlock) *
                     rewardsPerBlockForQuarter[startQuarter];

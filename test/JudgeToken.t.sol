@@ -4,12 +4,16 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "../src/JudgeToken.sol";
+import "../src/JudgeTreasury.sol";
 import {Checkpoints} from "../lib/openzeppelin-contracts/contracts/utils/structs/Checkpoints.sol";
 import {IAccessControl} from "../lib/openzeppelin-contracts/contracts/access/IAccessControl.sol";
 import {IERC165} from "../lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol";
 
 contract JudgeTokenTest is Test {
     JudgeToken public judgeToken;
+    JudgeTreasury public judgeTreasury;
+    RewardsManager public rewardsManager;
+    JudgeStaking public judgeStaking;
 
     address public owner;
     address public zeroAddress;
@@ -20,15 +24,24 @@ contract JudgeTokenTest is Test {
     address public user3;
     uint8 decimals = 18;
     uint256 initialSupply = 100_000 * 10 ** uint256(decimals);
-    uint8 earlyWithdrawPenaltyPercent = 5;
+    uint8 earlyWithdrawPenaltyPercentForMaxLockup = 5;
 
     error AccessControlUnauthorizedAccount(address account, bytes32 neededRole);
     error ERC20InvalidSender(address sender);
     error ERC20InvalidReceiver(address receiver);
     error ERC20InvalidSpender(address spender);
     error AmountExceedsMintableUnallocatedJudge();
-    error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed);
-    error ERC20InsufficientBalance(address sender, uint256 balance, uint256 needed);
+    error ExceedsRemainingAllocation();
+    error ERC20InsufficientAllowance(
+        address spender,
+        uint256 allowance,
+        uint256 needed
+    );
+    error ERC20InsufficientBalance(
+        address sender,
+        uint256 balance,
+        uint256 needed
+    );
     error AccessControlBadConfirmation();
     error ERC2612ExpiredSignature(uint256 deadline);
     error ERC2612InvalidSigner(address signer, address owner);
@@ -40,6 +53,20 @@ contract JudgeTokenTest is Test {
         user2 = makeAddr("user2");
         user3 = vm.addr(pKey2);
         judgeToken = new JudgeToken(initialSupply);
+
+        rewardsManager = new RewardsManager(address(judgeToken));
+        judgeStaking = new JudgeStaking(
+            address(judgeToken),
+            earlyWithdrawPenaltyPercentForMaxLockup
+        );
+        judgeTreasury = new JudgeTreasury(
+            address(judgeToken),
+            address(rewardsManager),
+            address(judgeStaking)
+        );
+
+        bytes32 allocationMinterRole = judgeToken.ALLOCATION_MINTER_ROLE();
+        judgeToken.grantRole(allocationMinterRole, address(judgeTreasury));
     }
 
     function testName() public {
@@ -76,19 +103,59 @@ contract JudgeTokenTest is Test {
         assertTrue(judgeToken.hasRole(minterRole, owner));
     }
 
-    function testMint() public {
+    function testGeneralMint() public {
         uint256 mintAmount = 10_000 * 10 ** uint256(decimals);
+        uint256 tooHighMintAmount = 399_890_001e18;
         bytes32 minterRole = judgeToken.MINTER_ROLE();
         judgeToken.generalMint(user1, mintAmount);
         assertEq(judgeToken.balanceOf(user1), mintAmount);
-        assertEq(judgeToken.totalSupply(), judgeToken.balanceOf(user1) + judgeToken.balanceOf(owner));
+        assertEq(
+            judgeToken.totalSupply(),
+            judgeToken.balanceOf(user1) + judgeToken.balanceOf(owner)
+        );
 
         vm.prank(user1);
-        vm.expectRevert(abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector, user1, minterRole));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AccessControlUnauthorizedAccount.selector,
+                user1,
+                minterRole
+            )
+        );
         judgeToken.generalMint(user1, mintAmount);
 
-        vm.expectRevert(abi.encodeWithSelector(ERC20InvalidReceiver.selector, address(0)));
+        vm.expectRevert(
+            abi.encodeWithSelector(ERC20InvalidReceiver.selector, address(0))
+        );
         judgeToken.generalMint(zeroAddress, mintAmount);
+
+        vm.expectRevert(AmountExceedsMintableUnallocatedJudge.selector);
+        judgeToken.generalMint(user2, tooHighMintAmount);
+
+        assertEq(judgeToken.mintableUnallocatedJudge(), 399890000e18);
+    }
+
+    function testMintFromAllocation() public {
+        bytes32 allocationMinterRole = judgeToken.ALLOCATION_MINTER_ROLE();
+        bytes32 fundManagerAdmin = judgeTreasury.FUND_MANAGER_ROLE();
+        uint256 mintAmount = 100_000 * 10 ** uint256(decimals);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AccessControlUnauthorizedAccount.selector,
+                user1,
+                allocationMinterRole
+            )
+        );
+        vm.prank(user1);
+        judgeToken.mintFromAllocation(user1, mintAmount);
+
+        judgeTreasury.grantRole(fundManagerAdmin, owner);
+
+        judgeTreasury.fundTeamDevelopment(user1, 20_000_000e18);
+        assertEq(judgeToken.mintableAllocatedJudge(), 80_000_000e18);
+
+        vm.expectRevert(ExceedsRemainingAllocation.selector);
+        judgeTreasury.fundTeamDevelopment(user2, 80_000_001e18);
     }
 
     function testBurn() public {
@@ -99,7 +166,9 @@ contract JudgeTokenTest is Test {
         judgeToken.burn(burnAmount);
         assertEq(mintAmount - burnAmount, judgeToken.balanceOf(user1));
 
-        vm.expectRevert(abi.encodeWithSelector(ERC20InvalidSender.selector, address(0)));
+        vm.expectRevert(
+            abi.encodeWithSelector(ERC20InvalidSender.selector, address(0))
+        );
         vm.prank(zeroAddress);
         judgeToken.burn(burnAmount);
     }
@@ -120,7 +189,14 @@ contract JudgeTokenTest is Test {
         assertEq(judgeToken.balanceOf(user2), balanceLeft);
 
         // This will revert with insufficiant allowance before reverting with invalid sender
-        vm.expectRevert(abi.encodeWithSelector(ERC20InsufficientAllowance.selector, user1, 0, burnAmount));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                ERC20InsufficientAllowance.selector,
+                user1,
+                0,
+                burnAmount
+            )
+        );
         vm.prank(user1);
         judgeToken.burnFrom(zeroAddress, burnAmount);
     }
@@ -144,17 +220,24 @@ contract JudgeTokenTest is Test {
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                ERC20InsufficientBalance.selector, user2, judgeToken.balanceOf(user2), amountGreaterThanBalance
+                ERC20InsufficientBalance.selector,
+                user2,
+                judgeToken.balanceOf(user2),
+                amountGreaterThanBalance
             )
         );
         vm.prank(user2);
         judgeToken.transfer(user1, amountGreaterThanBalance);
 
-        vm.expectRevert(abi.encodeWithSelector(ERC20InvalidSender.selector, address(0)));
+        vm.expectRevert(
+            abi.encodeWithSelector(ERC20InvalidSender.selector, address(0))
+        );
         vm.prank(zeroAddress);
         judgeToken.transfer(user1, amount);
 
-        vm.expectRevert(abi.encodeWithSelector(ERC20InvalidReceiver.selector, address(0)));
+        vm.expectRevert(
+            abi.encodeWithSelector(ERC20InvalidReceiver.selector, address(0))
+        );
         vm.prank(user2);
         judgeToken.transfer(zeroAddress, amount);
     }
@@ -169,7 +252,12 @@ contract JudgeTokenTest is Test {
         judgeToken.approve(user1, allowance);
 
         vm.expectRevert(
-            abi.encodeWithSelector(ERC20InsufficientAllowance.selector, user1, allowance, valueGreaterThanAllowance)
+            abi.encodeWithSelector(
+                ERC20InsufficientAllowance.selector,
+                user1,
+                allowance,
+                valueGreaterThanAllowance
+            )
         );
         vm.prank(user1);
         judgeToken.transferFrom(user2, user3, valueGreaterThanAllowance);
@@ -195,7 +283,9 @@ contract JudgeTokenTest is Test {
         uint256 allowance = 30_000 * 10 ** uint256(decimals);
         judgeToken.generalMint(user2, mintAmount);
 
-        vm.expectRevert(abi.encodeWithSelector(ERC20InvalidSpender.selector, address(0)));
+        vm.expectRevert(
+            abi.encodeWithSelector(ERC20InvalidSpender.selector, address(0))
+        );
         vm.prank(user2);
         judgeToken.approve(zeroAddress, allowance);
     }
@@ -207,7 +297,13 @@ contract JudgeTokenTest is Test {
         judgeToken.grantRole(minterRole, user1);
         assertTrue(judgeToken.hasRole(minterRole, user1));
 
-        vm.expectRevert(abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector, user1, defaultAdmin));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AccessControlUnauthorizedAccount.selector,
+                user1,
+                defaultAdmin
+            )
+        );
         vm.prank(user1);
         judgeToken.grantRole(minterRole, user2);
     }
@@ -231,7 +327,13 @@ contract JudgeTokenTest is Test {
         judgeToken.grantRole(minterRole, user2);
         assertTrue(judgeToken.hasRole(minterRole, user2));
 
-        vm.expectRevert(abi.encodeWithSelector(AccessControlUnauthorizedAccount.selector, user1, defaultAdmin));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AccessControlUnauthorizedAccount.selector,
+                user1,
+                defaultAdmin
+            )
+        );
         vm.prank(user1);
         judgeToken.revokeRole(minterRole, user2);
         assertTrue(judgeToken.hasRole(minterRole, user2));
@@ -249,14 +351,18 @@ contract JudgeTokenTest is Test {
         judgeToken.renounceRole(minterRole, user2);
         assertFalse(judgeToken.hasRole(minterRole, user2));
 
-        vm.expectRevert(abi.encodeWithSelector(AccessControlBadConfirmation.selector));
+        vm.expectRevert(
+            abi.encodeWithSelector(AccessControlBadConfirmation.selector)
+        );
         vm.prank(user2);
         judgeToken.renounceRole(minterRole, user1);
     }
 
     function testSupportsInterface() public {
         assertTrue(judgeToken.supportsInterface(type(IERC165).interfaceId));
-        assertTrue(judgeToken.supportsInterface(type(IAccessControl).interfaceId));
+        assertTrue(
+            judgeToken.supportsInterface(type(IAccessControl).interfaceId)
+        );
     }
 
     function testDelegate() public {
@@ -343,17 +449,29 @@ contract JudgeTokenTest is Test {
         uint32 num = judgeToken.numCheckpoints(owner);
 
         for (uint32 i = 0; i < num; i++) {
-            Checkpoints.Checkpoint208 memory ckpt = judgeToken.checkpoints(owner, i);
+            Checkpoints.Checkpoint208 memory ckpt = judgeToken.checkpoints(
+                owner,
+                i
+            );
             console.log("Checkpoint", i);
             console.log("fromBlock", ckpt._key);
             console.log("Votes", ckpt._value);
         }
 
-        Checkpoints.Checkpoint208 memory ckpt1 = judgeToken.checkpoints(owner, 0);
+        Checkpoints.Checkpoint208 memory ckpt1 = judgeToken.checkpoints(
+            owner,
+            0
+        );
         assertEq(ckpt1._value, initialSupply);
-        Checkpoints.Checkpoint208 memory ckpt2 = judgeToken.checkpoints(owner, 1);
+        Checkpoints.Checkpoint208 memory ckpt2 = judgeToken.checkpoints(
+            owner,
+            1
+        );
         assertEq(ckpt2._value, initialSupply - amount);
-        Checkpoints.Checkpoint208 memory ckpt3 = judgeToken.checkpoints(owner, 2);
+        Checkpoints.Checkpoint208 memory ckpt3 = judgeToken.checkpoints(
+            owner,
+            2
+        );
         assertEq(ckpt3._value, initialSupply - amount + amount2);
     }
 
@@ -370,7 +488,9 @@ contract JudgeTokenTest is Test {
     ) internal pure returns (bytes32) {
         bytes32 domainSeparator = keccak256(
             abi.encode(
-                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+                ),
                 keccak256(bytes(name)),
                 keccak256(bytes(version)),
                 chainId,
@@ -378,16 +498,27 @@ contract JudgeTokenTest is Test {
             )
         );
 
-        bytes32 permitTypehash =
-            keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
-
-        return keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                domainSeparator,
-                keccak256(abi.encode(permitTypehash, signer, spender, value, nonce, deadline))
-            )
+        bytes32 permitTypehash = keccak256(
+            "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
         );
+
+        return
+            keccak256(
+                abi.encodePacked(
+                    "\x19\x01",
+                    domainSeparator,
+                    keccak256(
+                        abi.encode(
+                            permitTypehash,
+                            signer,
+                            spender,
+                            value,
+                            nonce,
+                            deadline
+                        )
+                    )
+                )
+            );
     }
 
     function testNonces() public {
@@ -396,7 +527,15 @@ contract JudgeTokenTest is Test {
         uint256 user1Nonce = judgeToken.nonces(user1);
         uint256 deadline = block.timestamp + 1 days;
         bytes32 digest = getPermitDigest(
-            "JudgeToken", "1", address(judgeToken), block.chainid, user1, user2, value, user1Nonce, deadline
+            "JudgeToken",
+            "1",
+            address(judgeToken),
+            block.chainid,
+            user1,
+            user2,
+            value,
+            user1Nonce,
+            deadline
         );
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pKey, digest);
@@ -410,8 +549,17 @@ contract JudgeTokenTest is Test {
         judgeToken.generalMint(user1, mintValue);
         uint256 nonce = judgeToken.nonces(user1);
         uint256 deadline = block.timestamp + 1 days;
-        bytes32 digest =
-            getPermitDigest("JudgeToken", "1", address(judgeToken), block.chainid, user1, user2, value, nonce, deadline);
+        bytes32 digest = getPermitDigest(
+            "JudgeToken",
+            "1",
+            address(judgeToken),
+            block.chainid,
+            user1,
+            user2,
+            value,
+            nonce,
+            deadline
+        );
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pKey, digest);
         judgeToken.permit(user1, user2, value, deadline, v, r, s);
@@ -430,12 +578,23 @@ contract JudgeTokenTest is Test {
         judgeToken.generalMint(user1, mintValue);
         uint256 nonce = judgeToken.nonces(user1);
         uint256 deadline = block.timestamp + 1 days;
-        bytes32 digest =
-            getPermitDigest("JudgeToken", "1", address(judgeToken), block.chainid, user1, user2, value, nonce, deadline);
+        bytes32 digest = getPermitDigest(
+            "JudgeToken",
+            "1",
+            address(judgeToken),
+            block.chainid,
+            user1,
+            user2,
+            value,
+            nonce,
+            deadline
+        );
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pKey, digest);
         vm.warp(deadline + 1 days);
-        vm.expectRevert(abi.encodeWithSelector(ERC2612ExpiredSignature.selector, deadline));
+        vm.expectRevert(
+            abi.encodeWithSelector(ERC2612ExpiredSignature.selector, deadline)
+        );
         judgeToken.permit(user1, user2, value, deadline, v, r, s);
     }
 
@@ -445,11 +604,22 @@ contract JudgeTokenTest is Test {
         judgeToken.generalMint(user1, mintValue);
         uint256 nonce = judgeToken.nonces(user1);
         uint256 deadline = block.timestamp + 1 days;
-        bytes32 digest =
-            getPermitDigest("JudgeToken", "1", address(judgeToken), block.chainid, user1, user2, value, nonce, deadline);
+        bytes32 digest = getPermitDigest(
+            "JudgeToken",
+            "1",
+            address(judgeToken),
+            block.chainid,
+            user1,
+            user2,
+            value,
+            nonce,
+            deadline
+        );
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pKey2, digest);
-        vm.expectRevert(abi.encodeWithSelector(ERC2612InvalidSigner.selector, user3, user1));
+        vm.expectRevert(
+            abi.encodeWithSelector(ERC2612InvalidSigner.selector, user3, user1)
+        );
         judgeToken.permit(user1, user2, value, deadline, v, r, s);
     }
 
@@ -462,13 +632,20 @@ contract JudgeTokenTest is Test {
 
         bytes32 structHash = keccak256(
             abi.encode(
-                keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)"), delegatee, nonce, expiry
+                keccak256(
+                    "Delegation(address delegatee,uint256 nonce,uint256 expiry)"
+                ),
+                delegatee,
+                nonce,
+                expiry
             )
         );
 
         bytes32 domainSeparator = judgeToken.DOMAIN_SEPARATOR();
 
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", domainSeparator, structHash)
+        );
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pKey, digest);
 

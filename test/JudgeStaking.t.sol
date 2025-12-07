@@ -350,9 +350,7 @@ contract JudgeStakingTest is Test {
         );
     }
 
-    function testUpdatePool() public {}
-
-    function testIsPoolUpToDate() public {
+    function testUpdatePoolFunctions() public {
         uint256 reward = 1_000_000 * 10 ** uint256(decimals);
         uint256 reward2 = 1_250_000 * 10 ** uint256(decimals);
         uint256 reward3 = 500_000 * 10 ** uint256(decimals);
