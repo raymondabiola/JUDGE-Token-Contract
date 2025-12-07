@@ -43,6 +43,7 @@ contract JudgeStakingTest is Test {
     error NotYetMatured();
     error AlreadyMatured();
     error AlreadyTriggered();
+    error PoolNotUpToDate();
 
     struct UserStake {
         uint64 id;
@@ -351,9 +352,64 @@ contract JudgeStakingTest is Test {
 
     function testUpdatePool() public {}
 
-    function testStaleQuarterUpdateBehaviour() public {}
+    function testIsPoolUpToDate() public {
+        uint256 reward = 1_000_000 * 10 ** uint256(decimals);
+        uint256 reward2 = 1_250_000 * 10 ** uint256(decimals);
+        uint256 reward3 = 500_000 * 10 ** uint256(decimals);
+        uint256 amount = 100_000 * 10 ** uint256(decimals);
+        uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
+        uint256 depositAmount2 = 35_000 * 10 ** uint256(decimals);
+        uint32 lockUpPeriod = 180;
+        uint32 lockUpPeriod2 = 360;
+        uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
+        judgeToken.generalMint(user1, amount);
+        judgeToken.generalMint(user2, amount);
 
-    function testIsPoolUpToDate() public {}
+        vm.prank(user1);
+        judgeToken.approve(address(judgeStaking), amount);
+
+        vm.prank(user2);
+        judgeToken.approve(address(judgeStaking), amount);
+        vm.roll(poolStartBlock);
+
+        judgeTreasury.setNewQuarterlyRewards(reward);
+        judgeTreasury.fundRewardsManager(1);
+
+        vm.prank(user1);
+        judgeStaking.deposit(depositAmount, lockUpPeriod);
+
+        vm.roll(poolStartBlock + 600_000);
+
+        vm.startPrank(user1);
+        judgeStaking.deposit(depositAmount2, lockUpPeriod2);
+        assertTrue(judgeStaking.isPoolUpToDate());
+        vm.stopPrank();
+
+        vm.roll(poolStartBlock + 648_001);
+        assertTrue(!judgeStaking.isPoolUpToDate());
+
+        judgeTreasury.setNewQuarterlyRewards(reward2);
+        judgeTreasury.fundRewardsManager(2);
+
+        vm.roll(poolStartBlock + 1_296_001);
+        judgeTreasury.setNewQuarterlyRewards(reward3);
+        judgeTreasury.fundRewardsManager(3);
+        assertTrue(!judgeStaking.isPoolUpToDate());
+
+        vm.roll(poolStartBlock + 1_300_001);
+        vm.prank(user2);
+        judgeStaking.deposit(depositAmount, lockUpPeriod);
+        assertTrue(judgeStaking.isPoolUpToDate());
+
+        vm.roll(poolStartBlock + 5_832_000);
+        vm.expectRevert(PoolNotUpToDate.selector);
+        vm.prank(user2);
+        judgeStaking.deposit(depositAmount2, lockUpPeriod2);
+        judgeStaking.updatePool();
+        assertTrue(!judgeStaking.isPoolUpToDate());
+        judgeStaking.updatePool();
+        assertTrue(judgeStaking.isPoolUpToDate());
+    }
 
     function testPoolHasStaleQuarters() public {
         uint256 reward = 1_000_000 * 10 ** uint256(decimals);

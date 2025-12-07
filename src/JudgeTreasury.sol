@@ -143,11 +143,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         _;
     }
 
-    modifier notSelf(address _addr) {
-        require(_addr != address(this), CannotInputThisContractAddress());
-        _;
-    }
-
     modifier notEoa(address _addr) {
         require(_addr.code.length > 0, EOANotAllowed());
         _;
@@ -217,7 +212,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     function addBonusToQuarterReward(
         uint256 _bonus,
         uint256 _durationInBlocks
-    ) external validAmount(_bonus) validAmount(_durationInBlocks) {
+    ) external validAmount(_bonus) validAmount(_durationInBlocks) nonReentrant {
         uint32 currentQuarterIndex = judgeStaking.getCurrentQuarterIndex();
         uint256 stakingStart = judgeStaking.stakingPoolStartBlock();
         uint256 quarterBlocks = judgeStaking.QUARTER_BLOCKS();
@@ -258,13 +253,13 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     // Assign the treasury precise balance updater role to JudgeStaking contract and Rewards Manager Contract
     function increaseTreasuryPreciseBalance(
         uint256 _amount
-    ) external onlyRole(TREASURY_PRECISE_BALANCE_UPDATER) {
+    ) external onlyRole(TREASURY_PRECISE_BALANCE_UPDATER) nonReentrant {
         treasuryPreciseBalance += _amount;
     }
 
     function fundRewardsManager(
         uint32 _index
-    ) external onlyRole(FUND_MANAGER_ROLE) {
+    ) external onlyRole(FUND_MANAGER_ROLE) nonReentrant {
         uint256 rewardAmount = quarters[_index].baseReward;
         if (quarters[_index].isFunded) revert QuarterAllocationAlreadyFunded();
         if (
@@ -288,7 +283,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     function mintToTreasuryReserve(
         uint256 _amount
-    ) external validAmount(_amount) onlyRole(FUND_MANAGER_ROLE) {
+    ) external validAmount(_amount) onlyRole(FUND_MANAGER_ROLE) nonReentrant {
         judgeToken.generalMint(address(this), _amount); //Grant minter role to judgeTreasury to be able to call this function
         treasuryPreciseBalance += _amount;
 

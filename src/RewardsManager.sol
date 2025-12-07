@@ -129,14 +129,14 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     // Assign this role to the JudgeTreasury contract from deployment script
     function increaseRewardsManagerBaseBalanceAccounting(
         uint256 _amount
-    ) external onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER) {
+    ) external onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER) nonReentrant {
         if (address(judgeTreasury) == address(0)) revert JudgeTreasuryNotSet();
         rewardsManagerBaseRewardBalance += _amount;
     }
 
     function increaseRewardsManagerBonusBalanceAccounting(
         uint256 _amount
-    ) external onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER) {
+    ) external onlyRole(REWARDS_MANAGER_PRECISE_BALANCE_UPDATER) nonReentrant {
         if (address(judgeTreasury) == address(0)) revert JudgeTreasuryNotSet();
         rewardsManagerBonusBalance += _amount;
     }
