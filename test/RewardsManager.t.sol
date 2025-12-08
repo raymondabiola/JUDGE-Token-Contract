@@ -27,7 +27,6 @@ contract RewardsManagerTest is Test {
 
     error InvalidAddress();
     error AccessControlUnauthorizedAccount(address account, bytes32 neededRole);
-    error CannotInputThisContractAddress();
     error ValueHigherThanThreshold();
     error InvalidAmount();
     error InsufficientBalance();
@@ -99,7 +98,7 @@ contract RewardsManagerTest is Test {
         vm.expectRevert(InvalidAddress.selector);
         rewardsManager.setJudgeTreasuryAddress(zeroAddress);
 
-        vm.expectRevert(CannotInputThisContractAddress.selector);
+        vm.expectRevert(InvalidAddress.selector);
         rewardsManager.setJudgeTreasuryAddress(address(rewardsManager));
 
         vm.expectRevert(InvalidAddress.selector);
@@ -184,7 +183,7 @@ contract RewardsManagerTest is Test {
 
         vm.expectRevert(InvalidAddress.selector);
         rewardsManager.emergencyWithdrawal(zeroAddress);
-        vm.expectRevert(CannotInputThisContractAddress.selector);
+        vm.expectRevert(InvalidAddress.selector);
         rewardsManager.emergencyWithdrawal(address(rewardsManager));
         rewardsManager.emergencyWithdrawal(user1);
         assertEq(
@@ -403,7 +402,7 @@ contract RewardsManagerTest is Test {
         vm.expectRevert(InvalidAddress.selector);
         rewardsManager.recoverMisplacedJudge(zeroAddress, misplacedAmount);
 
-        vm.expectRevert(CannotInputThisContractAddress.selector);
+        vm.expectRevert(InvalidAddress.selector);
         rewardsManager.recoverMisplacedJudge(
             address(rewardsManager),
             misplacedAmount
@@ -452,7 +451,7 @@ contract RewardsManagerTest is Test {
 
         rewardsManager.grantRole(tokenRecoveryAdmin, owner);
 
-        vm.expectRevert(CannotInputThisContractAddress.selector);
+        vm.expectRevert(InvalidAddress.selector);
         rewardsManager.recoverErc20(
             strandedTokenAddr,
             address(rewardsManager),
@@ -527,7 +526,7 @@ contract RewardsManagerTest is Test {
 
         rewardsManager.grantRole(fundManagerRole, owner);
 
-        vm.expectRevert(CannotInputThisContractAddress.selector);
+        vm.expectRevert(InvalidAddress.selector);
         rewardsManager.transferFeesFromOtherTokensOutOfRewardsManager(
             strandedTokenAddr,
             address(rewardsManager),

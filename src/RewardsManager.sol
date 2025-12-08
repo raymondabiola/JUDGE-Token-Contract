@@ -67,7 +67,6 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
 
     error InvalidAmount();
     error InvalidAddress();
-    error CannotInputThisContractAddress();
     error JudgeTokenRecoveryNotAllowed();
     error InsufficientContractBalance();
     error InsufficientBalance();
@@ -83,12 +82,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     }
 
     modifier validAddress(address _to) {
-        require(_to != address(0), InvalidAddress());
-        _;
-    }
-
-    modifier notSelf(address _to) {
-        require(_to != address(this), CannotInputThisContractAddress());
+        require(_to != address(0) && _to != address(this), InvalidAddress());
         _;
     }
 
@@ -99,7 +93,11 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
 
     function setJudgeTreasuryAddress(
         address _judgeTreasuryAddress
-    ) external notSelf(_judgeTreasuryAddress) onlyRole(DEFAULT_ADMIN_ROLE) {
+    )
+        external
+        validAddress(_judgeTreasuryAddress)
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         if (_judgeTreasuryAddress.code.length == 0) revert InvalidAddress();
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
         emit JudgeTreasuryAddressUpdated(_judgeTreasuryAddress);
@@ -176,13 +174,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
     //Sensitive function to pull out all balances from rewardsManager
     function emergencyWithdrawal(
         address _to
-    )
-        external
-        validAddress(_to)
-        notSelf(_to)
-        onlyRole(FUND_MANAGER_ROLE)
-        nonReentrant
-    {
+    ) external validAddress(_to) onlyRole(FUND_MANAGER_ROLE) nonReentrant {
         uint256 balance = judgeToken.balanceOf(address(this));
         if (balance == 0) revert InsufficientContractBalance();
         judgeToken.transfer(_to, balance);
@@ -226,7 +218,6 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         external
         validAddress(_to)
         validAmount(_amount)
-        notSelf(_to)
         onlyRole(TOKEN_RECOVERY_ROLE)
         nonReentrant
     {
@@ -250,7 +241,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         uint256 _amount
     )
         external
-        notSelf(_addr)
+        validAddress(_addr)
         validAmount(_amount)
         onlyRole(TOKEN_RECOVERY_ROLE)
         nonReentrant
@@ -277,7 +268,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         uint256 _amount
     )
         external
-        notSelf(_to)
+        validAddress(_to)
         validAmount(_amount)
         onlyRole(FUND_MANAGER_ROLE)
         nonReentrant
