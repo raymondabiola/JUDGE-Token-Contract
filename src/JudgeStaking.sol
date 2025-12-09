@@ -212,7 +212,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         notEoa(_judgeTreasuryAddress)
     {
         judgeTreasury = JudgeTreasury(_judgeTreasuryAddress);
-        _grantRole(REWARDS_PER_BLOCK_CALCULATOR, _judgeTreasuryAddress);
         emit JudgeTreasuryAddressUpdated(_judgeTreasuryAddress);
     }
 
