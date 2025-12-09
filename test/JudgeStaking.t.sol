@@ -234,7 +234,7 @@ contract JudgeStakingTest is Test {
             newEarlyWithdrawalPercent
         );
         (uint8 newEarlyWithdrawPenaltyPercent, , ) = judgeStaking.settings();
-        assertEq(newEarlyWithdrawalPercent, 5);
+        assertEq(newEarlyWithdrawPenaltyPercent, 5);
     }
 
     function testGetCurrentQuarterIndex() public {
@@ -278,7 +278,7 @@ contract JudgeStakingTest is Test {
         uint256 assumedTotalStakeWeight = 10_000_000 * 10 ** uint256(decimals);
         vm.store(
             address(judgeStaking),
-            bytes32(uint256(9)),
+            bytes32(uint256(10)),
             bytes32(assumedTotalStakeWeight)
         );
 
@@ -1302,48 +1302,7 @@ contract JudgeStakingTest is Test {
         );
     }
 
-    function testViewMyStakes() public {
-        uint256 amount = 100_000 * 10 ** uint256(decimals);
-        uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
-        uint256 depositAmount2 = 35_000 * 10 ** uint256(decimals);
-        uint32 lockUpPeriod = 180;
-        uint32 lockUpPeriod2 = 360;
-        judgeToken.generalMint(user1, amount);
-
-        vm.startPrank(user1);
-        judgeToken.approve(address(judgeStaking), amount);
-        uint256 blockNumber = block.number;
-        judgeStaking.deposit(depositAmount, lockUpPeriod);
-        vm.stopPrank();
-
-        vm.roll(blockNumber + 60);
-        uint256 blockNumber2 = block.number;
-
-        vm.startPrank(user1);
-        judgeStaking.deposit(depositAmount2, lockUpPeriod2);
-
-        JudgeStaking.UserStake[] memory myStakes = judgeStaking.viewMyStakes();
-        assertEq(myStakes.length, 2);
-        assertEq(myStakes[0].id, 1);
-        assertEq(myStakes[0].amountStaked, depositAmount);
-        assertEq(myStakes[0].lockUpPeriod, lockUpPeriod);
-        assertEq(myStakes[0].depositBlockNumber, blockNumber);
-        assertEq(
-            myStakes[0].maturityBlockNumber,
-            blockNumber + (lockUpPeriod * 7200)
-        );
-
-        assertEq(myStakes[1].id, 2);
-        assertEq(myStakes[1].amountStaked, depositAmount2);
-        assertEq(myStakes[1].lockUpPeriod, lockUpPeriod2);
-        assertEq(myStakes[1].depositBlockNumber, blockNumber2);
-        assertEq(
-            myStakes[1].maturityBlockNumber,
-            blockNumber2 + (lockUpPeriod2 * 7200)
-        );
-    }
-
-    function testViewMyStakesAtIndex() public {
+    function testViewMyStakeAtIndex() public {
         uint256 amount = 100_000 * 10 ** uint256(decimals);
         uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
         uint256 depositAmount2 = 35_000 * 10 ** uint256(decimals);
@@ -1421,111 +1380,7 @@ contract JudgeStakingTest is Test {
         );
     }
 
-    function testViewUsersList() public {
-        bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
-        uint256 amount = 100_000 * 10 ** uint256(decimals);
-        uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
-        uint256 amount2 = 150_000 * 10 ** uint256(decimals);
-        uint256 depositAmount2 = 80_000 * 10 ** uint256(decimals);
-        uint32 lockUpPeriod = 180;
-        uint32 lockUpPeriod2 = 360;
-        uint256 poolStartBlock = judgeStaking.stakingPoolStartBlock();
-        judgeToken.generalMint(user1, amount);
-        judgeToken.generalMint(user2, amount);
-        judgeToken.generalMint(user3, amount2);
-
-        vm.roll(poolStartBlock);
-
-        vm.startPrank(user1);
-        judgeToken.approve(address(judgeStaking), depositAmount);
-        judgeStaking.deposit(depositAmount, lockUpPeriod);
-        vm.stopPrank();
-
-        vm.startPrank(user2);
-        judgeToken.approve(address(judgeStaking), depositAmount);
-        judgeStaking.deposit(depositAmount, lockUpPeriod2);
-        vm.stopPrank();
-
-        vm.startPrank(user3);
-        judgeToken.approve(address(judgeStaking), depositAmount2);
-        judgeStaking.deposit(depositAmount2, lockUpPeriod);
-        vm.stopPrank();
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AccessControlUnauthorizedAccount.selector,
-                user2,
-                stakingAdmin
-            )
-        );
-        vm.prank(user2);
-        judgeStaking.viewUsersList();
-
-        address[] memory usersArray = judgeStaking.viewUsersList();
-        assertEq(usersArray[0], 0x29E3b139f4393aDda86303fcdAa35F60Bb7092bF);
-        assertEq(usersArray[1], 0x537C8f3d3E18dF5517a58B3fB9D9143697996802);
-        assertEq(usersArray[2], 0xc0A55e2205B289a967823662B841Bd67Aa362Aec);
-    }
-
-    function testViewUserStakes() public {
-        bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
-        uint256 amount = 100_000 * 10 ** uint256(decimals);
-        uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
-        uint256 depositAmount2 = 35_000 * 10 ** uint256(decimals);
-        uint32 lockUpPeriod = 180;
-        uint32 lockUpPeriod2 = 360;
-        judgeToken.generalMint(user1, amount);
-
-        vm.startPrank(user1);
-        judgeToken.approve(address(judgeStaking), amount);
-        uint256 blockNumber = block.number;
-        judgeStaking.deposit(depositAmount, lockUpPeriod);
-        vm.stopPrank();
-
-        vm.roll(blockNumber + 60);
-        uint256 blockNumber2 = block.number;
-
-        vm.prank(user1);
-        judgeStaking.deposit(depositAmount2, lockUpPeriod2);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AccessControlUnauthorizedAccount.selector,
-                user2,
-                stakingAdmin
-            )
-        );
-        vm.prank(user2);
-        judgeStaking.viewUserStakes(user1);
-
-        vm.expectRevert(InvalidAddress.selector);
-        judgeStaking.viewUserStakes(zeroAddress);
-
-        JudgeStaking.UserStake[] memory user1Stakes = judgeStaking
-            .viewUserStakes(user1);
-
-        assertEq(user1Stakes.length, 2);
-        assertEq(user1Stakes[0].id, 1);
-        assertEq(user1Stakes[0].amountStaked, depositAmount);
-        assertEq(user1Stakes[0].lockUpPeriod, lockUpPeriod);
-        assertEq(user1Stakes[0].depositBlockNumber, blockNumber);
-        assertEq(
-            user1Stakes[0].maturityBlockNumber,
-            blockNumber + (lockUpPeriod * 7200)
-        );
-
-        assertEq(user1Stakes[1].id, 2);
-        assertEq(user1Stakes[1].amountStaked, depositAmount2);
-        assertEq(user1Stakes[1].lockUpPeriod, lockUpPeriod2);
-        assertEq(user1Stakes[1].depositBlockNumber, blockNumber2);
-        assertEq(
-            user1Stakes[1].maturityBlockNumber,
-            blockNumber2 + (lockUpPeriod2 * 7200)
-        );
-    }
-
     function testViewUserStakeAtIndex() public {
-        bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
         uint256 amount = 100_000 * 10 ** uint256(decimals);
         uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
         uint256 depositAmount2 = 35_000 * 10 ** uint256(decimals);
@@ -1538,16 +1393,6 @@ contract JudgeStakingTest is Test {
         uint256 blockNumber = block.number;
         judgeStaking.deposit(depositAmount, lockUpPeriod);
         vm.stopPrank();
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                AccessControlUnauthorizedAccount.selector,
-                user2,
-                stakingAdmin
-            )
-        );
-        vm.prank(user2);
-        judgeStaking.viewUserStakeAtIndex(user1, 0);
 
         vm.expectRevert(InvalidAddress.selector);
         judgeStaking.viewUserStakeAtIndex(zeroAddress, 0);

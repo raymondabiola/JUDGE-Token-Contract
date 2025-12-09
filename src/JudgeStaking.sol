@@ -18,7 +18,7 @@ interface IRewardsManager {
 contract JudgeStaking is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    JudgeToken public immutable judgeToken;
+    JudgeToken public judgeToken;
     JudgeTreasury public judgeTreasury;
     IRewardsManager public rewardsManager;
 
@@ -35,10 +35,10 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint256 public constant QUARTER_BLOCKS = 648_000; // ~90 days at 12s/block
     uint32 public constant BLOCKS_PER_YEAR = 2_628_000; // 12 sec blocktime
     uint8 public constant MAX_UPDATE_QUARTERS = 4;
-    uint8 public constant MAX_SIMULATED_QUARTERS = 12;
-    uint16 public constant MAX_LOCK_UP_PERIOD_DAYS = 360; // 1 year max lock
-    uint8 public constant MAX_PENALTY_PERCENT = 20;
-    uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30;
+    uint8 public constant MAX_SIMULATED_QUARTERS = 12; // Safe for simulation. Wont break RPC
+    uint16 public constant MAX_LOCK_UP_PERIOD_DAYS = 360; // 1 year max lock assumed at 360 days
+    uint8 public constant MAX_PENALTY_PERCENT = 20; // Max threshold for penalty percent for a stake with 360 days lockup period
+    uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30; // Max threshold of feePercent that can be charged on misplaced tokens.
 
     uint256 public stakingPoolStartBlock;
     uint64 private newStakeId;
@@ -49,24 +49,24 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint256 public totalStaked;
 
     struct Settings {
-        uint8 earlyWithdrawPenaltyPercentForMaxLockupPeriod; //This is the penalty percent that is charged on a user stake if they
-        //lockup for 360 days MAX_LOCK_UP_PERIOD_DAYS and withdraw early, for lower lockUpPeriods, the penalty is scaled down based on duration/MAX_LOCK_UP_PERIOD_DAYS
-        uint8 feePercent; //Fee charged to recover misplaced JudgeTokens sent to the contract
+        uint8 earlyWithdrawPenaltyPercentForMaxLockupPeriod /** This is the penalty percent that 
+        is charged on a user stake if they lockup for 360 days MAX_LOCK_UP_PERIOD_DAYS and withdraw
+        before maturity, for lower lockUpPeriods, the penalty is scaled down based on 
+        lockUpPeriod/MAX_LOCK_UP_PERIOD_DAYS **/;
+        uint8 feePercent; //Fee percent charged to recover misplaced Jtokens sent to the contract
         uint32 lastFullyUpdatedQuarter;
     }
 
     Settings public settings;
 
-    uint256 public totalPenalties;
+    uint256 public totalPenalties; // accounting of total penalties received from early withdrawal
     uint256 public judgeRecoveryMinimumThreshold; //Feasible minimum amount of JudgeTokens that's worth recovering
     uint256 public totalClaimedBaseRewards;
     uint256 public totalClaimedBonusRewards;
     uint256 public totalAccruedBaseRewards;
     uint256 public totalAccruedBonusRewards;
 
-    address[] internal users;
-    mapping(address => UserStake[]) internal userStakes;
-    mapping(address => bool) internal isUser;
+    mapping(address => UserStake[]) public userStakes;
 
     struct UserStake {
         uint64 id;
@@ -94,9 +94,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     event JudgeTreasuryAddressUpdated(address indexed newJudgeTreasuryAddress);
     event JudgeRecoveryMinimumThresholdUpdated(
         uint256 oldValue,
-        uint256 newValue
-    );
-    event EarlyWithdrawPenaltyPercentForMaxLockupPeriodInitialized(
         uint256 newValue
     );
     event EarlyWithdrawPenaltyPercentForMaxLockupPeriodUpdated(
@@ -157,7 +154,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         stakingPoolStartBlock = block.number;
         lastRewardBlock = stakingPoolStartBlock;
         emit JudgeTokenAddressWasSet(_judgeTokenAddress);
-        emit EarlyWithdrawPenaltyPercentForMaxLockupPeriodInitialized(
+        emit EarlyWithdrawPenaltyPercentForMaxLockupPeriodUpdated(
             _earlyWithdrawPenaltyPercentForMaxLockupPeriod
         );
     }
@@ -487,11 +484,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         judgeToken.transferFrom(msg.sender, address(this), _amount);
         userStakes[msg.sender].push(newStake);
 
-        if (!isUser[msg.sender]) {
-            users.push(msg.sender);
-            isUser[msg.sender] = true;
-        }
-
         newStakeId++;
         emit Deposited(msg.sender, _amount);
     }
@@ -783,14 +775,18 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     }
 
     // == USER VIEW FUNCTIONS ==
-    function viewMyStakes() external view returns (UserStake[] memory) {
-        return userStakes[msg.sender];
-    }
-
     function viewMyStakeAtIndex(
         uint16 _index
     ) external view validIndex(_index) returns (UserStake memory) {
         return userStakes[msg.sender][_index];
+    }
+
+    function viewUserStakeAtIndex(
+        address addr,
+        uint16 _index
+    ) external view validAddress(addr) returns (UserStake memory) {
+        if (_index >= userStakes[addr].length) revert InvalidIndex();
+        return userStakes[addr][_index];
     }
 
     function _simulateAccPerShareValues(
@@ -905,42 +901,6 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             : 0;
 
         return pendingReward + pendingBonus;
-    }
-
-    // == ADMIN VIEW FUNCTIONS ==
-    function viewUsersList()
-        external
-        view
-        onlyRole(STAKING_ADMIN_ROLE)
-        returns (address[] memory)
-    {
-        return users;
-    }
-
-    function viewUserStakes(
-        address addr
-    )
-        external
-        view
-        validAddress(addr)
-        onlyRole(STAKING_ADMIN_ROLE)
-        returns (UserStake[] memory)
-    {
-        return userStakes[addr];
-    }
-
-    function viewUserStakeAtIndex(
-        address addr,
-        uint16 _index
-    )
-        external
-        view
-        validAddress(addr)
-        onlyRole(STAKING_ADMIN_ROLE)
-        returns (UserStake memory)
-    {
-        if (_index >= userStakes[addr].length) revert InvalidIndex();
-        return userStakes[addr][_index];
     }
 
     // == TOKEN RECOVERY FUNCTIONS ==
