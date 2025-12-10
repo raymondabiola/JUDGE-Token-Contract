@@ -3,11 +3,11 @@
 *The JudgeToken ecosystem is a modular set of contracts thats includes the following:*
 
 - **JudgeToken**: This is the ERC20 token contract that defines the rules for the JUDGE governance token.
-- **JudgeTreasury**: This is the project safe treasury that does funding for the Rewards Manager contract, teams, and itself.
-- **JudgeStaking**: Staking contract with defined rules for staking and rewards with JudgeToken, open to all participants..
+- **JudgeTreasury**: This is the project safe treasury that does funding for the staking rewards, team. Also functions as a bank for fees collected from misplaced tokens.
+- **JudgeStaking**: Contract with defined rules for staking and pays out rewards in JudgeToken. Open to anyone.
 - **RewardsManager**: This is the rewards distributor contract for base and bonus rewards handling.
 
-**The contracts were built with OpenZeppelin Access control for role based administration and also includes robust recovery systems to make accidental transfers of ERC20 tokens**
+**The contracts were built with OpenZeppelin Access control for role based administration and also includes robust recovery systems for accidental transfers of ERC20 tokens to any of the Judge Project contracts expect the token contract. It is assumed that users are unlikely to have interactions with the token contract on a technical level**
 
 ## *Contracts Overview*
 
@@ -20,60 +20,61 @@
 
 
 **The JudgeToken contract defines allocation for:** <br>
-- Staking Rewards
-- Team Funding
+- Staking Rewards Allocation
+- Team Allocation
 
 ### 2. JudgeTreasury
-*Acts as the fund manager contract for the ecosystem* <br> <br>
+*Acts as the Bank contract for the ecosystem* <br> <br>
 **Features**: 
 - Can mint tokens to self
-- Can fund rewards manager contracts for staking rewards
+- Can fund rewards manager contracts with staking base rewards
 - Handles team funding too
-- Supports sending bonus rewards to the staking pool.
-<br> **NOTE**: Bonus rewards can only be sent to the rewards manager contract if the base quarterly reward for current quarter has been paid
+- Supports sending bonus rewards to the Reward Manager contract.
+<br> **NOTE**: Bonus rewards can only be sent to the rewards manager contract if the base quarterly reward for the current quarter has been paid. A minimum of 100k blocks can be set for bonus duration.
 - Includes recovery function for JUDGE and other ERC20 tokens. A defined fee is paid for token recovery.
 
 ### 3. Rewards Manager
-*Distributes rewards to stakers in the JudgeStaking contract during claim or withdrawals* <br> <br>
+*Distributes rewards to stakers in the JudgeStaking contract whenever a claim or withdrawal related functions are called by the a staker* <br> <br>
 **Handles**: 
-- Payment of quarterly rewards (sent from Treasury)
-- Payment of optional bonus rewards
+- Payment of quarterly base rewards.
+- Payment of optional quarterly bonus rewards
 - Provides JudgeStaking with the hooks below to enable claim: <br>
 `sendRewards()` <br>
 `sendBonus()`
-- **NOTE**: Bonus rewards can only be sent to the rewards manager contract if the base quarterly reward for current quarter has been paid.
 - Includes recovery function for JUDGE and other ERC20 tokens. A defined fee is paid for token recovery.
 
 ### 4. Judge Staking
 *This is the core staking contract where users can lock their JUDGE tokens to earn pro-rata rewards* <br> <br>
 **Reward Accounting**: 
-- It uses `accJudgePerShare` and `accBonusJudgePerShare` to calculate user earnings over a number of blocks
+- It uses `accJudgePerShare` and `accBonusJudgePerShare` to calculate stake earnings per share over a number of blocks
 **Key Functions**: 
-- The `deposit()` function allows any address to participate in the staking contract by staking JUDGE tokens
+- The `deposit()` function allows any address to participate in the staking contract by staking JUDGE tokens. They simply input a stake amount and a lockup duration to create a stake.
 - Users can use the `claimRewards()` function to withdraw their rewards while still having their stakes in the pool
-- The `withdraw()` function when called claims pending rewards and withdraws specified amount for the target stake to the user wallet.
-- The `withdrawAll()` function when called claims pending rewards and withdraws all the target stake balance to the user wallet.
-- The `earlyWithdraw()` function when called claims pending rewards and withdraws specified amount for the target stake to the user wallet (penalty applies). The penalty is dependent on two the defined `earlyWithdrawalPenaltyPercent` and the lockup duration.
-- The `emergencyWithdraw()` function is an admin-only, one time function call that returns all stakes and rewards to all participants of the staking pool at the block of calling the function
-- It includes the token recovery function (recovery fee applies)
+- The `withdraw()` function when called claims pending rewards and withdraws specified amount for the target stake to the user wallet. Calling this function is not possible until the stake at the desired index is matured. Matured stakes will keep receiving a pro rata share of rewards.
+- The `withdrawAll()` function when called claims pending rewards and withdraws all the desired stake index balance to the user wallet. Calling this function is also not possible until the stake matures.
+- The `earlyWithdraw()` function when called claims pending rewards and withdraws specified amount for the target stake to the user wallet (penalty applies). Learn more about the penalty.
+- It includes the token recovery function (recovery fee applies). Learn more about recovery fees.
 
 **Integration**:
-- Interacts with the Rewards Manager contract to distribute base and bonus rewards
+- Interacts with the Rewards Manager contract to distribute base and bonus rewards. Any time a user initiates a claim or a withdrawal, the staking contract calls the sendRewards() and sendBonus() if the pending baseReward and pending bonusRewards are greater than 0.
 
 ## Security Features
-- Built with OpenZeppelin Access Control contract to support role based permissions across all contracts
-- Multiple gatekeepers and modifiers to handle edge cases
-- Recovery functions for all ERC20 tokens in all contracts except JUDGE Token contract itself
+- Built with OpenZeppelin Access Control contract to support role based permissions across all contracts.
+- Multiple gatekeepers and modifiers to handle edge cases.
+- Follows the CEI security order for solidity contracts.
+- Recovery functions for all ERC20 tokens in all contracts except JUDGE Token contract itself.
+- Reentrancy proof
 
 ## Deployment Notes
-*The contracts are dependent on one another. You can correctly deploy them in this order*
+*The 4 contracts somewhat have circular dependency. You can correctly deploy them in this order:*
 - `JudgeToken.sol`
 - `RewardsManager.sol`
 - `JudgeStaking.sol`
 - `JudgeTreasury.sol` <br> <br>
 **Grant neccesary roles across contracts to allow secure and seamless interactions. Some examples below:**
-- Grant Judge Treasury address the `MINTER_ROLE()` from Judge Token contract
-- Grant Jusge Staking address the `REWARDS_DISTRIBUTOR_ROLE()`
+- Grant Judge Treasury address the `MINTER_ROLE()`  and `ALLOCATION_MINTER_ROLE()` from Judge Token contract
+- Grant Jusge Staking address the `REWARDS_DISTRIBUTOR_ROLE()` <br><br>
+**Alternatively run the deployment script in this repo to seamlessly deploy all 4 contracts**
 
 ---
 ## Getting Started (Developer)
@@ -123,7 +124,7 @@ $ forge script script/DeployJudgeContracts.s.sol:DeployJudgeContracts \
   --chain-id 11155111
 ```
 **The script will:**
-- Deploy all contracts, set key parameters,and grant neccesary roles. You need to grant other needed roles after deployment
+- Deploy all contracts, verify their source code, set key parameters on each contract,and grant neccesary roles to deployer address.
 
 ## Deployed Instances on [Sepolia Testnet](https://sepolia.etherscan.io/)
 - **JudgeToken Contract Address:** [`0x167043a312d6c3b8c4b5b741225173e65ff45d9a`](https://sepolia.etherscan.io/address/0x167043a312d6c3b8c4b5b741225173e65ff45d9a)
