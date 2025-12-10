@@ -94,6 +94,7 @@ contract DeployJudgeContracts is Script {
     function grantContractKeyRoles() internal {
         //Token contract role
         bytes32 allocationMinterRole = judgeToken.ALLOCATION_MINTER_ROLE();
+        bytes32 minterRole = judgeToken.MINTER_ROLE();
 
         //RewardsManager contract Roles
         bytes32 rewardsDistributor = rewardsManager.REWARDS_DISTRIBUTOR_ROLE();
@@ -110,6 +111,7 @@ contract DeployJudgeContracts is Script {
 
         //Grant roles to correct contracts
         judgeToken.grantRole(allocationMinterRole, address(judgeTreasury));
+        judgeToken.grantRole(minterRole, address(judgeTreasury));
 
         rewardsManager.grantRole(rewardsDistributor, address(judgeStaking));
         rewardsManager.grantRole(
