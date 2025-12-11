@@ -53,6 +53,7 @@
 - The `withdraw()` function when called claims pending rewards and withdraws specified amount for the target stake to the user wallet. Calling this function is not possible until the stake at the desired index is matured. Matured stakes will keep receiving a pro rata share of rewards.
 - The `withdrawAll()` function when called claims pending rewards and withdraws all the desired stake index balance to the user wallet. Calling this function is also not possible until the stake matures.
 - The `earlyWithdraw()` function when called claims pending rewards and withdraws specified amount for the target stake to the user wallet (penalty applies). Learn more about the penalty.
+- The `updatePool()` function when called loops through missed quarters starting from the lastRewardBlock. For each call, the pool loops through a maximum of 4 quarters. If the pool has many stale quarters, the `updatePool()` can be called repeatedly to update the staking pool to the current block.
 - It includes the token recovery function (recovery fee applies). Learn more about recovery fees.
 
 **Integration**:
