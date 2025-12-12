@@ -369,12 +369,6 @@ contract RewardsManagerTest is Test {
         bytes32 rewardsManagerAdmin = rewardsManager
             .REWARDS_MANAGER_ADMIN_ROLE();
         bytes32 tokenRecoveryAdmin = rewardsManager.TOKEN_RECOVERY_ROLE();
-        bytes32 treasuryPreciseBalanceUpdater = judgeTreasury
-            .TREASURY_PRECISE_BALANCE_UPDATER();
-        judgeTreasury.grantRole(
-            treasuryPreciseBalanceUpdater,
-            address(rewardsManager)
-        );
         uint256 misplacedAmount = 100_000 * 10 ** uint256(decimals);
         uint256 invalidAmount;
         uint8 feePercent = 10;
@@ -388,6 +382,8 @@ contract RewardsManagerTest is Test {
         judgeTreasury.setNewQuarterlyRewards(rewards);
         judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
         judgeTreasury.fundRewardsManager(index);
+
+        uint256 totalSupply1 = judgeToken.totalSupply();
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -412,11 +408,9 @@ contract RewardsManagerTest is Test {
         rewardsManager.recoverMisplacedJudge(user3, invalidAmount);
 
         rewardsManager.recoverMisplacedJudge(user3, misplacedAmount);
+        uint256 totalSupply2 = judgeToken.totalSupply();
         assertEq(judgeToken.balanceOf(user3), (misplacedAmount * 9) / 10);
-        assertEq(
-            judgeToken.balanceOf(address(judgeTreasury)),
-            misplacedAmount / 10
-        );
+        assertEq(totalSupply1 - totalSupply2, misplacedAmount / 10);
     }
 
     function testRecoverErc20() public {

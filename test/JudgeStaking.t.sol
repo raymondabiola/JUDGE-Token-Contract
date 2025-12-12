@@ -86,8 +86,6 @@ contract JudgeStakingTest is Test {
         bytes32 rewardsManagerPreciseBalanceUpdater = rewardsManager
             .REWARDS_MANAGER_PRECISE_BALANCE_UPDATER();
         bytes32 rewardsDistributor = rewardsManager.REWARDS_DISTRIBUTOR_ROLE();
-        bytes32 treasuryPreciseBalanceUpdater = judgeTreasury
-            .TREASURY_PRECISE_BALANCE_UPDATER();
         bytes32 rewardsManagerAdmin = rewardsManager
             .REWARDS_MANAGER_ADMIN_ROLE();
         bytes32 stakingAdmin = judgeStaking.STAKING_ADMIN_ROLE();
@@ -113,10 +111,6 @@ contract JudgeStakingTest is Test {
             address(judgeTreasury)
         );
         rewardsManager.grantRole(rewardsDistributor, address(judgeStaking));
-        judgeTreasury.grantRole(
-            treasuryPreciseBalanceUpdater,
-            address(judgeStaking)
-        );
         judgeToken.grantRole(allocationMinterRole, address(judgeTreasury));
 
         console.log("JudgeTokenAddress", address(judgeToken));
@@ -129,8 +123,6 @@ contract JudgeStakingTest is Test {
         console.logBytes32(rewardsManagerPreciseBalanceUpdater);
         console.log("rewardsDistributor is:");
         console.logBytes32(rewardsDistributor);
-        console.log("Treasuryprecisebalanceupdater is:");
-        console.logBytes32(treasuryPreciseBalanceUpdater);
         console.log("rewardsManagerAdmin is:");
         console.logBytes32(rewardsManagerAdmin);
         console.log("Staking Admin is:");
@@ -1245,8 +1237,8 @@ contract JudgeStakingTest is Test {
             penalty;
         assertEq(totalAmountWithdrawn, expectedTotalWithdrawnByUser2);
 
-        // Checks if penalty was successfully transferred
-        assertEq(judgeToken.balanceOf(address(judgeTreasury)), 5e21);
+        // Checks if penalty was successfully burned
+        assertEq(judgeToken.balanceOf(zeroAddress), 5e21);
     }
 
     function testTotalUnclaimedRewards() public {
@@ -1587,10 +1579,7 @@ contract JudgeStakingTest is Test {
 
         judgeStaking.recoverMisplacedJudge(user3, misplacedAmount);
         assertEq(judgeToken.balanceOf(user3), (misplacedAmount * 9) / 10);
-        assertEq(
-            judgeToken.balanceOf(address(judgeTreasury)),
-            misplacedAmount / 10
-        );
+        assertEq(judgeToken.balanceOf(zeroAddress), misplacedAmount / 10);
     }
 
     function testRecoverErc20() public {

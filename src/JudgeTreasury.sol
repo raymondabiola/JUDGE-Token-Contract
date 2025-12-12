@@ -250,13 +250,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         );
     }
 
-    // Assign the treasury precise balance updater role to JudgeStaking contract and Rewards Manager Contract
-    function increaseTreasuryPreciseBalance(
-        uint256 _amount
-    ) external onlyRole(TREASURY_PRECISE_BALANCE_UPDATER) nonReentrant {
-        treasuryPreciseBalance += _amount;
-    }
-
     function fundRewardsManager(
         uint32 _index
     ) external onlyRole(FUND_MANAGER_ROLE) nonReentrant {
@@ -375,7 +368,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         uint256 refund = (_amount * (100 - uint256(settings.feePercent))) / 100;
         uint256 fee = _amount - refund;
         if (fee > 0) {
-            treasuryPreciseBalance += fee;
+            judgeToken.burn(fee);
         }
         judgeToken.transfer(_to, refund);
         emit JudgeTokenRecovered(_to, refund, fee);

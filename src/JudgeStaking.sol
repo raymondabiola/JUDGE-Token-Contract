@@ -705,9 +705,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
 
         uint256 netAmount = _amount - penalty;
 
+        judgeToken.burn(penalty);
         totalPenalties += penalty;
-        judgeTreasury.increaseTreasuryPreciseBalance(penalty);
-        judgeToken.transfer(address(judgeTreasury), penalty);
 
         stake.amountStaked -= _amount;
 
@@ -933,8 +932,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
         uint256 fee = _amount - refund;
 
         if (fee > 0) {
-            judgeToken.transfer(address(judgeTreasury), fee);
-            judgeTreasury.increaseTreasuryPreciseBalance(fee);
+            judgeToken.burn(fee);
         }
 
         judgeToken.transfer(_to, refund);

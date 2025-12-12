@@ -105,10 +105,6 @@ contract DeployJudgeContracts is Script {
         bytes32 rewardsPerBlockCalculator = judgeStaking
             .REWARDS_PER_BLOCK_CALCULATOR();
 
-        //Treasury contract role
-        bytes32 treasuryPreciseBalanceUpdater = judgeTreasury
-            .TREASURY_PRECISE_BALANCE_UPDATER();
-
         //Grant roles to correct contracts
         judgeToken.grantRole(allocationMinterRole, address(judgeTreasury));
         judgeToken.grantRole(minterRole, address(judgeTreasury));
@@ -122,14 +118,6 @@ contract DeployJudgeContracts is Script {
         judgeStaking.grantRole(
             rewardsPerBlockCalculator,
             address(judgeTreasury)
-        );
-        judgeTreasury.grantRole(
-            treasuryPreciseBalanceUpdater,
-            address(judgeStaking)
-        );
-        judgeTreasury.grantRole(
-            treasuryPreciseBalanceUpdater,
-            address(rewardsManager)
         );
     }
 

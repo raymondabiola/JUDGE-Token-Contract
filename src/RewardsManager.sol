@@ -228,8 +228,7 @@ contract RewardsManager is AccessControl, ReentrancyGuard {
         uint256 refund = (_amount * (100 - uint256(feePercent))) / 100;
         uint256 fee = _amount - refund;
         if (fee > 0) {
-            judgeToken.transfer(address(judgeTreasury), fee);
-            judgeTreasury.increaseTreasuryPreciseBalance(fee);
+            judgeToken.burn(fee);
         }
         judgeToken.transfer(_to, refund);
         emit JudgeTokenRecovered(_to, refund, fee);
