@@ -1162,6 +1162,8 @@ contract JudgeStakingTest is Test {
             accBonusJudgePerShareAfter4000Blocks
         );
 
+        uint256 totalSupply1 = judgeToken.totalSupply();
+
         vm.roll(poolStartBlock + 80_000);
 
         uint256 totalStakeWeight = user1Stake1StakeWeight +
@@ -1235,10 +1237,12 @@ contract JudgeStakingTest is Test {
             user2BonusRewardsExpected +
             user2WithdrawnDeposit -
             penalty;
+
+        uint256 totalSupply2 = judgeToken.totalSupply();
         assertEq(totalAmountWithdrawn, expectedTotalWithdrawnByUser2);
 
         // Checks if penalty was successfully burned
-        assertEq(judgeToken.balanceOf(zeroAddress), 5e21);
+        assertEq(totalSupply1 - totalSupply2, 5e21);
     }
 
     function testTotalUnclaimedRewards() public {
@@ -1554,6 +1558,8 @@ contract JudgeStakingTest is Test {
         judgeStaking.deposit(depositAmount2, lockUpPeriod2);
         vm.stopPrank();
 
+        uint256 totalSupply1 = judgeToken.totalSupply();
+
         vm.expectRevert(
             abi.encodeWithSelector(
                 AccessControlUnauthorizedAccount.selector,
@@ -1578,8 +1584,9 @@ contract JudgeStakingTest is Test {
         judgeStaking.recoverMisplacedJudge(user3, invalidAmount);
 
         judgeStaking.recoverMisplacedJudge(user3, misplacedAmount);
+        uint256 totalSupply2 = judgeToken.totalSupply();
         assertEq(judgeToken.balanceOf(user3), (misplacedAmount * 9) / 10);
-        assertEq(judgeToken.balanceOf(zeroAddress), misplacedAmount / 10);
+        assertEq(totalSupply1 - totalSupply2, misplacedAmount / 10);
     }
 
     function testRecoverErc20() public {

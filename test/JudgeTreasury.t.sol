@@ -544,6 +544,8 @@ contract JudgeTreasuryTest is Test {
         judgeTreasury.mintToTreasuryReserve(amount);
         judgeTreasury.transferFromTreasury(user2, amountToTransfer);
 
+        uint256 totalSupply1 = judgeToken.totalSupply();
+
         vm.prank(user2);
         judgeToken.transfer(address(judgeTreasury), misplacedAmount);
         vm.expectRevert(
@@ -574,15 +576,13 @@ contract JudgeTreasuryTest is Test {
 
         uint256 oldBalanceOfUser2 = judgeToken.balanceOf(user2);
         judgeTreasury.recoverMisplacedJudge(user2, misplacedAmount);
+        uint256 totalSupply2 = judgeToken.totalSupply();
         uint256 newBalanceOfUser2 = judgeToken.balanceOf(user2);
         assertEq(
             newBalanceOfUser2 - oldBalanceOfUser2,
             (misplacedAmount * 90) / 100
         );
-        assertEq(
-            judgeTreasury.treasuryPreciseBalance(),
-            amount - amountToTransfer + ((misplacedAmount * 10) / 100)
-        );
+        assertEq(totalSupply1 - totalSupply2, (misplacedAmount * 10) / 100);
     }
 
     function testRecoverErc20() public {
