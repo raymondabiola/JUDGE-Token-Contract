@@ -169,7 +169,7 @@ contract JudgeTreasuryTest is Test {
         vm.prank(user2);
         judgeTreasury.setNewQuarterlyRewards(firstQuarterRewards);
 
-        vm.expectRevert(InvalidAmount.selector);
+        vm.expectRevert(RewardsInputedOutOfDefinedRange.selector);
         judgeTreasury.setNewQuarterlyRewards(invalidReward);
 
         vm.expectRevert(RewardsInputedOutOfDefinedRange.selector);
@@ -187,6 +187,8 @@ contract JudgeTreasuryTest is Test {
         assertEq(q1.baseReward, firstQuarterRewards);
         assertEq(q2.baseReward, secondQuarterRewards);
     }
+
+    function testOverrideNonFundedQuarterBaseReward() public {}
 
     function testAddBonusToQuarterReward() public {
         bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();

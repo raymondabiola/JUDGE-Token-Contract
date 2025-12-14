@@ -64,6 +64,11 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         uint256 oldValue,
         uint256 newValue
     );
+    event QuarterBaseRewardsCorrected(
+        uint32 index,
+        uint256 oldReward,
+        uint256 newReward
+    );
     event RewardsManagerFunded(uint256 amount);
     event TeamDevelopmentWasFunded(address indexed to, uint256 amount);
     event MintedToTreasury(uint256 amount);
@@ -83,6 +88,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     event JudgeTokenRecovered(address indexed to, uint256 refund, uint256 fee);
 
     error InvalidAmount();
+    error InvalidIndex();
     error InsufficientBalance();
     error InvalidAddress();
     error BonusTooSmall();
@@ -198,7 +204,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     function setNewQuarterlyRewards(
         uint256 _reward
     ) public onlyRole(TREASURY_ADMIN_ROLE) {
-        if (_reward == 0) revert InvalidAmount();
         if (
             _reward < MIN_QUARTERLY_REWARD_ALLOCATION ||
             _reward > MAX_QUARTERLY_REWARD_ALLOCATION
@@ -207,6 +212,24 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         }
         quarters[quarterIndex].baseReward = _reward;
         quarterIndex += 1;
+    }
+
+    //Corrects wrongly set quarter base rewards for non-funded quarters
+    function overrideNonFundedQuarterBaseReward(
+        uint32 _index,
+        uint256 _newReward
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
+        if (_index >= quarterIndex) revert InvalidIndex();
+        if (quarters[_index].isFunded) revert QuarterAllocationAlreadyFunded();
+        if (
+            _newReward < MIN_QUARTERLY_REWARD_ALLOCATION ||
+            _newReward > MAX_QUARTERLY_REWARD_ALLOCATION
+        ) {
+            revert RewardsInputedOutOfDefinedRange();
+        }
+        uint256 oldReward = quarters[_index].baseReward;
+        quarters[_index].baseReward = _newReward;
+        emit QuarterBaseRewardsCorrected(_index, oldReward, _newReward);
     }
 
     function addBonusToQuarterReward(
