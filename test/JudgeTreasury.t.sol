@@ -27,6 +27,7 @@ contract JudgeTreasuryTest is Test {
     error EOANotAllowed();
     error InvalidAddress();
     error InvalidAmount();
+    error InvalidIndex();
     error InsufficientBalance();
     error CannotInputThisContractAddress();
     error AccessControlUnauthorizedAccount(address account, bytes32 neededRole);
@@ -38,6 +39,7 @@ contract JudgeTreasuryTest is Test {
     error ValueHigherThanThreshold();
     error RewardsInputedOutOfDefinedRange();
     error CurrentQuarterAllocationNotYetFunded();
+    error QuarterAllocationAlreadyFunded();
 
     function setUp() public {
         owner = address(this);
@@ -188,7 +190,87 @@ contract JudgeTreasuryTest is Test {
         assertEq(q2.baseReward, secondQuarterRewards);
     }
 
-    function testOverrideNonFundedQuarterBaseReward() public {}
+    function testOverrideNonFundedQuarterBaseReward() public {
+        bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
+        bytes32 fundManagerAdmin = judgeTreasury.FUND_MANAGER_ROLE();
+        bytes32 defaultAdmin = judgeTreasury.DEFAULT_ADMIN_ROLE();
+        uint256 firstQuarterRewards = 1_000_000 * 10 ** uint256(decimals);
+        uint256 secondQuarterRewards = 1_250_000 * 10 ** uint256(decimals);
+        uint256 thirdQuarterRewards = 500_000 * 10 ** uint256(decimals);
+
+        uint256 invalidReward;
+        uint256 rewardsLowerThanMin = 416_665 * 10 ** uint256(decimals);
+        uint256 rewardsHigherThanMax = 1_250_001 * 10 ** uint256(decimals);
+
+        judgeTreasury.grantRole(treasuryAdmin, user2);
+        judgeTreasury.grantRole(fundManagerAdmin, owner);
+
+        judgeTreasury.setNewQuarterlyRewards(firstQuarterRewards);
+        judgeTreasury.setNewQuarterlyRewards(secondQuarterRewards);
+        judgeTreasury.setNewQuarterlyRewards(thirdQuarterRewards);
+
+        JudgeTreasury.QuarterInfo memory q1RewardBefore = judgeTreasury
+            .getQuarterInfo(1);
+        assertEq(q1RewardBefore.baseReward, firstQuarterRewards);
+        JudgeTreasury.QuarterInfo memory q2RewardBefore = judgeTreasury
+            .getQuarterInfo(2);
+        assertEq(q2RewardBefore.baseReward, secondQuarterRewards);
+        JudgeTreasury.QuarterInfo memory q3RewardBefore = judgeTreasury
+            .getQuarterInfo(3);
+        assertEq(q3RewardBefore.baseReward, thirdQuarterRewards);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AccessControlUnauthorizedAccount.selector,
+                user2,
+                defaultAdmin
+            )
+        );
+        vm.prank(user2);
+        judgeTreasury.overrideNonFundedQuarterBaseReward(
+            1,
+            firstQuarterRewards
+        );
+
+        vm.expectRevert(RewardsInputedOutOfDefinedRange.selector);
+        judgeTreasury.overrideNonFundedQuarterBaseReward(1, invalidReward);
+
+        vm.expectRevert(RewardsInputedOutOfDefinedRange.selector);
+        judgeTreasury.overrideNonFundedQuarterBaseReward(
+            1,
+            rewardsLowerThanMin
+        );
+
+        vm.expectRevert(RewardsInputedOutOfDefinedRange.selector);
+        judgeTreasury.overrideNonFundedQuarterBaseReward(
+            1,
+            rewardsHigherThanMax
+        );
+
+        judgeTreasury.fundRewardsManager(1);
+
+        vm.expectRevert(QuarterAllocationAlreadyFunded.selector);
+        judgeTreasury.overrideNonFundedQuarterBaseReward(1, 600_000e18);
+
+        vm.expectRevert(InvalidIndex.selector);
+        judgeTreasury.overrideNonFundedQuarterBaseReward(4, 600_000e18);
+
+        vm.expectRevert(InvalidIndex.selector);
+        judgeTreasury.overrideNonFundedQuarterBaseReward(5, 600_000e18);
+
+        judgeTreasury.overrideNonFundedQuarterBaseReward(2, 800_000e18);
+        judgeTreasury.overrideNonFundedQuarterBaseReward(3, 1_000_000e18);
+
+        JudgeTreasury.QuarterInfo memory q1RewardAfter = judgeTreasury
+            .getQuarterInfo(1);
+        assertEq(q1RewardAfter.baseReward, firstQuarterRewards);
+        JudgeTreasury.QuarterInfo memory q2RewardAfter = judgeTreasury
+            .getQuarterInfo(2);
+        assertEq(q2RewardAfter.baseReward, 800_000e18);
+        JudgeTreasury.QuarterInfo memory q3RewardAfter = judgeTreasury
+            .getQuarterInfo(3);
+        assertEq(q3RewardAfter.baseReward, 1_000_000e18);
+    }
 
     function testAddBonusToQuarterReward() public {
         bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
