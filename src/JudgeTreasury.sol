@@ -28,6 +28,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     uint256 public teamFundingReceived;
     uint256 public treasuryPreciseBalance; //Exact total amount of judgeTokens in treasury contract excluding misplaced judgeTokens
     uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30;
+    uint256 public minBonus;
     uint256 public judgeRecoveryMinimumThreshold; //Feasible minimum amount of JudgeTokens that's worth recovering
     uint256 public immutable MIN_QUARTERLY_REWARD_ALLOCATION; //Lower bound of quarterly reward allocation
     uint256 public immutable MAX_QUARTERLY_REWARD_ALLOCATION; //Upper bound of quarterly reward allocation
@@ -59,6 +60,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         address indexed newRewardsManagerAddress
     );
     event JudgeStakingAddressUpdated(address indexed newJudgeStakingAddress);
+    event MinBonusUpdated(uint256 oldMinBonus, uint256 newMinBonus);
     event FeePercentUpdated(uint8 oldValue, uint8 newValue);
     event JudgeRecoveryMinimumThresholdUpdated(
         uint256 oldValue,
@@ -98,7 +100,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     error EOANotAllowed();
     error RewardsInputedOutOfDefinedRange();
     error ExceedsRemainingAllocation();
-    error lastBonusStillRunning();
+    error LastBonusStillRunning();
     error NotUpToThreshold();
     error ValueHigherThanThreshold();
     error CurrentQuarterAllocationNotYetFunded();
@@ -129,6 +131,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         MAX_QUARTERLY_REWARD_ALLOCATION =
             1_250_000 *
             10 ** uint256(settings.decimals);
+        minBonus = 1000e18;
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
 
@@ -177,6 +180,14 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         judgeStaking = JudgeStaking(newJudgeStakingAddress);
 
         emit JudgeStakingAddressUpdated(newJudgeStakingAddress);
+    }
+
+    function updateMinBonus(
+        uint256 _newMinBonus
+    ) external validAmount(_newMinBonus) onlyRole(TREASURY_ADMIN_ROLE) {
+        uint256 oldMinBonus = minBonus;
+        minBonus = _newMinBonus;
+        emit MinBonusUpdated(oldMinBonus, _newMinBonus);
     }
 
     function updateFeePercent(
@@ -235,7 +246,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     function addBonusToQuarterReward(
         uint256 _bonus,
         uint256 _durationInBlocks
-    ) external validAmount(_bonus) validAmount(_durationInBlocks) nonReentrant {
+    ) external nonReentrant {
         uint32 currentQuarterIndex = judgeStaking.getCurrentQuarterIndex();
         uint256 stakingStart = judgeStaking.stakingPoolStartBlock();
         uint256 quarterBlocks = judgeStaking.QUARTER_BLOCKS();
@@ -248,13 +259,13 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         if (!quarters[currentQuarterIndex].isFunded) {
             revert CurrentQuarterAllocationNotYetFunded();
         }
-        if (_durationInBlocks < 100_000) revert DurationTooLow();
+        if (_durationInBlocks < 50_400) revert DurationTooLow(); //1 week min duration == 50400 blocks
         if (_durationInBlocks > quarterEndBlock - b) {
             revert DurationBeyondQuarterEnd();
         }
-        if (_bonus < _durationInBlocks) revert BonusTooSmall();
+        if (_bonus < minBonus) revert BonusTooSmall();
         if (b < quarters[currentQuarterIndex].currentBonusEndBlock) {
-            revert lastBonusStillRunning();
+            revert LastBonusStillRunning();
         }
 
         quarters[currentQuarterIndex].currentBonus = _bonus;
@@ -276,14 +287,14 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     function fundRewardsManager(
         uint32 _index
     ) external onlyRole(FUND_MANAGER_ROLE) nonReentrant {
+        if (_index >= quarterIndex) revert InvalidIndex();
         uint256 rewardAmount = quarters[_index].baseReward;
         if (quarters[_index].isFunded) revert QuarterAllocationAlreadyFunded();
         if (
             rewardAmount >
             judgeToken.MAX_STAKING_REWARD_ALLOCATION() - totalBaseRewardsFunded
-        ) {
-            revert ExceedsRemainingAllocation();
-        }
+        ) revert ExceedsRemainingAllocation();
+
         judgeToken.mintFromAllocation(address(rewardsManager), rewardAmount);
         totalBaseRewardsFunded += rewardAmount;
         rewardsManager.increaseRewardsManagerBaseBalanceAccounting(

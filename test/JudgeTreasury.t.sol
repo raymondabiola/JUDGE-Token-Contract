@@ -34,6 +34,10 @@ contract JudgeTreasuryTest is Test {
     error ExceedsRemainingAllocation();
     error AmountExceedsMintableUnallocatedJudge();
     error NotUpToThreshold();
+    error DurationTooLow();
+    error DurationBeyondQuarterEnd();
+    error BonusTooSmall();
+    error LastBonusStillRunning();
     error JudgeTokenRecoveryNotAllowed();
     error InsufficientContractBalance();
     error ValueHigherThanThreshold();
@@ -274,13 +278,13 @@ contract JudgeTreasuryTest is Test {
 
     function testAddBonusToQuarterReward() public {
         bytes32 fundManager = judgeTreasury.FUND_MANAGER_ROLE();
-        uint256 stakingStart = judgeStaking.stakingPoolStartBlock();
+        uint256 q1Start = judgeStaking.stakingPoolStartBlock();
         uint256 firstQuarterRewards = 1_000_000 * 10 ** uint256(decimals);
         uint256 secondQuarterRewards = 1_250_000 * 10 ** uint256(decimals);
-        uint256 additionalRewards = 20_000 * 10 ** uint256(decimals);
+        uint256 bonus = 20_000 * 10 ** uint256(decimals);
+        uint256 bonus2 = 999e18;
         uint256 invalidRewards;
-        uint256 q1Start = stakingStart;
-        uint256 q2Start = stakingStart + 648_000;
+        uint256 q2Start = q1Start + 648_000;
 
         judgeTreasury.grantRole(fundManager, owner);
 
@@ -288,18 +292,31 @@ contract JudgeTreasuryTest is Test {
 
         judgeTreasury.setNewQuarterlyRewards(secondQuarterRewards);
 
-        vm.expectRevert(InvalidAmount.selector);
-        judgeTreasury.addBonusToQuarterReward(invalidRewards, 100_000);
         vm.expectRevert(CurrentQuarterAllocationNotYetFunded.selector);
-        judgeTreasury.addBonusToQuarterReward(additionalRewards, 100_000);
+        judgeTreasury.addBonusToQuarterReward(bonus, 100_000);
 
         judgeToken.approve(
             address(judgeTreasury),
-            40_000 * 10 ** uint256(decimals)
+            60_000 * 10 ** uint256(decimals)
         );
-        vm.warp(q1Start);
+        vm.roll(q1Start);
         judgeTreasury.fundRewardsManager(1);
-        judgeTreasury.addBonusToQuarterReward(additionalRewards, 100_000);
+
+        vm.expectRevert(DurationTooLow.selector);
+        judgeTreasury.addBonusToQuarterReward(bonus, 50_399);
+
+        vm.roll(q1Start + 500_000);
+
+        vm.expectRevert(DurationBeyondQuarterEnd.selector);
+        judgeTreasury.addBonusToQuarterReward(bonus, 148_001);
+        vm.expectRevert(BonusTooSmall.selector);
+        judgeTreasury.addBonusToQuarterReward(bonus2, 100_000);
+
+        judgeTreasury.addBonusToQuarterReward(bonus, 80_000);
+
+        vm.roll(q1Start + 560_000);
+        vm.expectRevert(LastBonusStillRunning.selector);
+        judgeTreasury.addBonusToQuarterReward(bonus, 60_000);
 
         assertEq(
             judgeToken.balanceOf(address(rewardsManager)),
@@ -309,7 +326,7 @@ contract JudgeTreasuryTest is Test {
 
         vm.roll(q2Start);
         judgeTreasury.fundRewardsManager(2);
-        judgeTreasury.addBonusToQuarterReward(additionalRewards, 100_000);
+        judgeTreasury.addBonusToQuarterReward(bonus, 100_000);
 
         assertEq(
             judgeToken.balanceOf(address(rewardsManager)),
@@ -408,11 +425,18 @@ contract JudgeTreasuryTest is Test {
             bytes32(uint256(5)),
             bytes32(stakingRewardsFundFromTreasury2)
         );
+
+        vm.expectRevert(InvalidIndex.selector);
+        judgeTreasury.fundRewardsManager(2);
+
         judgeTreasury.fundRewardsManager(index);
         assertEq(
             judgeTreasury.totalBaseRewardsFunded(),
             41_000_000 * 10 ** uint256(decimals)
         );
+
+        vm.expectRevert(QuarterAllocationAlreadyFunded.selector);
+        judgeTreasury.fundRewardsManager(index);
     }
 
     function testMintToTreasuryReserve() public {
@@ -438,6 +462,7 @@ contract JudgeTreasuryTest is Test {
         judgeToken.grantRole(minterRole, address(judgeTreasury));
         judgeTreasury.mintToTreasuryReserve(amount);
         assertEq(judgeToken.balanceOf(address(judgeTreasury)), amount);
+        assertEq(judgeTreasury.treasuryPreciseBalance(), amount);
 
         vm.store(
             address(judgeToken),
