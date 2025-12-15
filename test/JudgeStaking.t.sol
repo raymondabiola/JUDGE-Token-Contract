@@ -344,8 +344,6 @@ contract JudgeStakingTest is Test {
 
     function testUpdatePoolFunctions() public {
         uint256 reward = 1_000_000 * 10 ** uint256(decimals);
-        uint256 reward2 = 1_250_000 * 10 ** uint256(decimals);
-        uint256 reward3 = 500_000 * 10 ** uint256(decimals);
         uint256 amount = 100_000 * 10 ** uint256(decimals);
         uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
         uint256 depositAmount2 = 35_000 * 10 ** uint256(decimals);
@@ -378,20 +376,39 @@ contract JudgeStakingTest is Test {
         vm.roll(poolStartBlock + 648_001);
         assertTrue(!judgeStaking.isPoolUpToDate());
 
-        judgeTreasury.setNewQuarterlyRewards(reward2);
+        judgeTreasury.setNewQuarterlyRewards(reward);
         judgeTreasury.fundRewardsManager(2);
 
-        vm.roll(poolStartBlock + 1_296_001);
-        judgeTreasury.setNewQuarterlyRewards(reward3);
+        judgeTreasury.setNewQuarterlyRewards(reward);
         judgeTreasury.fundRewardsManager(3);
+
+        vm.roll(poolStartBlock + 1_296_001);
         assertTrue(!judgeStaking.isPoolUpToDate());
 
         vm.roll(poolStartBlock + 1_300_001);
+        judgeTreasury.setNewQuarterlyRewards(reward);
+        judgeTreasury.fundRewardsManager(4);
         vm.prank(user2);
         judgeStaking.deposit(depositAmount, lockUpPeriod);
         assertTrue(judgeStaking.isPoolUpToDate());
 
-        vm.roll(poolStartBlock + 5_832_000);
+        vm.roll(poolStartBlock + 4_000_000);
+        judgeTreasury.setNewQuarterlyRewards(reward);
+        judgeTreasury.fundRewardsManager(5);
+
+        judgeTreasury.setNewQuarterlyRewards(reward);
+        judgeTreasury.fundRewardsManager(6);
+
+        judgeTreasury.setNewQuarterlyRewards(reward);
+        judgeTreasury.fundRewardsManager(7);
+
+        judgeTreasury.setNewQuarterlyRewards(reward);
+        judgeTreasury.fundRewardsManager(8);
+
+        judgeTreasury.setNewQuarterlyRewards(reward);
+        judgeTreasury.fundRewardsManager(9);
+
+        vm.roll(poolStartBlock + 5_831_999);
         vm.expectRevert(PoolNotUpToDate.selector);
         vm.prank(user2);
         judgeStaking.deposit(depositAmount2, lockUpPeriod2);
@@ -1300,11 +1317,17 @@ contract JudgeStakingTest is Test {
 
     function testViewMyStakeAtIndex() public {
         uint256 amount = 100_000 * 10 ** uint256(decimals);
+        uint256 reward = 1_000_000 * 10 ** uint256(decimals);
         uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
         uint256 depositAmount2 = 35_000 * 10 ** uint256(decimals);
         uint32 lockUpPeriod = 180;
         uint32 lockUpPeriod2 = 360;
+        uint256 startBlock = judgeStaking.stakingPoolStartBlock();
+
+        vm.roll(startBlock);
         judgeToken.generalMint(user1, amount);
+        judgeTreasury.setNewQuarterlyRewards(reward);
+        judgeTreasury.fundRewardsManager(1);
 
         vm.startPrank(user1);
         judgeToken.approve(address(judgeStaking), amount);
@@ -1378,11 +1401,18 @@ contract JudgeStakingTest is Test {
 
     function testViewUserStakeAtIndex() public {
         uint256 amount = 100_000 * 10 ** uint256(decimals);
+        uint256 reward = 1_000_000 * 10 ** uint256(decimals);
         uint256 depositAmount = 40_000 * 10 ** uint256(decimals);
         uint256 depositAmount2 = 35_000 * 10 ** uint256(decimals);
         uint32 lockUpPeriod = 180;
         uint32 lockUpPeriod2 = 360;
+        uint256 startBlock = judgeStaking.stakingPoolStartBlock();
+
+        vm.roll(startBlock);
         judgeToken.generalMint(user1, amount);
+
+        judgeTreasury.setNewQuarterlyRewards(reward);
+        judgeTreasury.fundRewardsManager(1);
 
         vm.startPrank(user1);
         judgeToken.approve(address(judgeStaking), amount);

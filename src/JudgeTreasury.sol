@@ -374,9 +374,10 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     }
 
     function getQuarterInfo(
-        uint32 index
+        uint32 _index
     ) public view returns (QuarterInfo memory) {
-        return quarters[index];
+        if (_index >= quarterIndex) revert InvalidIndex();
+        return quarters[_index];
     }
 
     function calculateMisplacedJudge() public view returns (uint256) {
