@@ -84,8 +84,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     event FeesFromOtherTokensTransferred(
         address indexed tokenAddress,
         address indexed to,
-        uint256 feeTransferred,
-        uint256 feeBalanceOfStrandedToken
+        uint256 feeTransferred
     );
     event JudgeTokenRecovered(address indexed to, uint256 refund, uint256 fee);
 
@@ -451,11 +450,6 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         }
         feeBalanceOfStrandedToken[_strandedTokenAddr] -= _amount;
         IERC20(_strandedTokenAddr).safeTransfer(_to, _amount);
-        emit FeesFromOtherTokensTransferred(
-            _strandedTokenAddr,
-            _to,
-            _amount,
-            feeBalanceOfStrandedToken[_strandedTokenAddr]
-        );
+        emit FeesFromOtherTokensTransferred(_strandedTokenAddr, _to, _amount);
     }
 }

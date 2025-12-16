@@ -156,7 +156,29 @@ contract JudgeTreasuryTest is Test {
         assertEq(address(judgeTreasury.judgeStaking()), address(judgeToken));
     }
 
-    function testUpdateMinBonus() public {}
+    function testUpdateMinBonus() public {
+        bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
+        uint256 invalidMinBonus;
+        uint256 newMinBonus = 10_000e18;
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AccessControlUnauthorizedAccount.selector,
+                user2,
+                treasuryAdmin
+            )
+        );
+        vm.prank(user2);
+        judgeTreasury.updateMinBonus(newMinBonus);
+
+        vm.expectRevert(InvalidAmount.selector);
+        judgeTreasury.updateMinBonus(invalidMinBonus);
+
+        assertEq(judgeTreasury.minBonus(), 1000e18);
+
+        judgeTreasury.updateMinBonus(newMinBonus);
+        assertEq(judgeTreasury.minBonus(), newMinBonus);
+    }
 
     function testSetNewQuarterlyRewards() public {
         bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
@@ -340,7 +362,7 @@ contract JudgeTreasuryTest is Test {
     function testUpdateFeePercent() public {
         bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();
         uint8 newFeePercent = 15;
-        uint8 incorrectFeePercent = 32;
+        uint8 incorrectFeePercent = 31;
         vm.expectRevert(
             abi.encodeWithSelector(
                 AccessControlUnauthorizedAccount.selector,
@@ -668,7 +690,7 @@ contract JudgeTreasuryTest is Test {
                 tokenRecoveryAdmin
             )
         );
-        judgeTreasury.recoverMisplacedJudge(zeroAddress, misplacedAmount);
+        judgeTreasury.recoverMisplacedJudge(user2, misplacedAmount);
 
         judgeTreasury.grantRole(tokenRecoveryAdmin, owner);
 
@@ -687,6 +709,9 @@ contract JudgeTreasuryTest is Test {
             misplacedAmount
         );
 
+        vm.expectRevert(InvalidAddress.selector);
+        judgeTreasury.recoverMisplacedJudge(zeroAddress, misplacedAmount);
+
         uint256 oldBalanceOfUser2 = judgeToken.balanceOf(user2);
         judgeTreasury.recoverMisplacedJudge(user2, misplacedAmount);
         uint256 totalSupply2 = judgeToken.totalSupply();
@@ -695,7 +720,7 @@ contract JudgeTreasuryTest is Test {
             newBalanceOfUser2 - oldBalanceOfUser2,
             (misplacedAmount * 90) / 100
         );
-        assertEq(totalSupply1 - totalSupply2, (misplacedAmount * 10) / 100);
+        assertEq(totalSupply1 - totalSupply2, (misplacedAmount * 10) / 100); //proof that the fee was burned
     }
 
     function testRecoverErc20() public {
@@ -826,24 +851,33 @@ contract JudgeTreasuryTest is Test {
             misplacedAmount / 10
         );
 
+        assertEq(
+            judgeTreasury.feeBalanceOfStrandedToken(strandedTokenAddr),
+            misplacedAmount / 10
+        );
+        uint256 amountHigherThanBalance = 2 *
+            (judgeTreasury.feeBalanceOfStrandedToken(strandedTokenAddr));
         vm.expectRevert(InsufficientBalance.selector);
         judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(
             strandedTokenAddr,
             user2,
-            (misplacedAmount * 2) / 10
+            amountHigherThanBalance
         );
 
+        uint256 currentBal = judgeTreasury.feeBalanceOfStrandedToken(
+            strandedTokenAddr
+        );
         vm.expectRevert(JudgeTokenRecoveryNotAllowed.selector);
         judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(
             address(judgeToken),
             user2,
-            misplacedAmount / 10
+            currentBal
         );
 
         judgeTreasury.transferFeesFromOtherTokensOutOfTreasury(
             strandedTokenAddr,
             user2,
-            misplacedAmount / 10
+            currentBal
         );
         assertEq(sampleErc20.balanceOf(user2), misplacedAmount / 10);
         assertEq(judgeTreasury.feeBalanceOfStrandedToken(strandedTokenAddr), 0);
