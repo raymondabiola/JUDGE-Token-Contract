@@ -33,6 +33,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     // == CONSTANTS ==
     uint256 public constant SCALE = 1e18; // 18 decimals
     uint256 public constant QUARTER_BLOCKS = 648_000; // ~90 days at 12s/block
+    uint16 public constant BLOCKS_PER_DAY = 7200;
     uint32 public constant BLOCKS_PER_YEAR = 2_628_000; // 12 sec blocktime
     uint8 public constant MAX_UPDATE_QUARTERS = 4;
     uint8 public constant MAX_SIMULATED_QUARTERS = 12; // Safe for simulation. Wont break RPC
@@ -478,7 +479,8 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                 accBonusJudgePerShare,
                 SCALE
             ),
-            maturityBlockNumber: block.number + (_lockUpPeriodInDays * 7200)
+            maturityBlockNumber: block.number +
+                (_lockUpPeriodInDays * BLOCKS_PER_DAY)
         });
 
         judgeToken.transferFrom(msg.sender, address(this), _amount);

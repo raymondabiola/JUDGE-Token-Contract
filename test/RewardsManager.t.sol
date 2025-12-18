@@ -228,6 +228,8 @@ contract RewardsManagerTest is Test {
         );
         vm.roll(startBlock + 324_000);
 
+        judgeTreasury.grantRole(fundManagerAdminTreasury, user1);
+
         vm.startPrank(user1);
         judgeToken.approve(
             address(judgeTreasury),
@@ -306,6 +308,8 @@ contract RewardsManagerTest is Test {
         assertEq(bonusClaimed, 0);
         assertApproxEqRel(total, 347142e18, 9e17);
 
+        judgeTreasury.grantRole(fundManagerAdminTreasury, user1);
+
         vm.startPrank(user1);
         judgeToken.approve(
             address(judgeTreasury),
@@ -338,6 +342,7 @@ contract RewardsManagerTest is Test {
         judgeTreasury.fundRewardsManager(1);
         vm.roll(startBlock + 324_000);
 
+        judgeTreasury.grantRole(fundManagerAdminTreasury, user1);
         vm.startPrank(user1);
         judgeToken.approve(
             address(judgeTreasury),

@@ -21,13 +21,12 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     bytes32 public immutable FUND_MANAGER_ROLE = keccak256("FUND_MANAGER_ROLE");
     bytes32 public immutable TOKEN_RECOVERY_ROLE =
         keccak256("TOKEN_RECOVERY_ROLE");
-    bytes32 public immutable TREASURY_PRECISE_BALANCE_UPDATER =
-        keccak256("TREASURY_PRECISE_BALANCE_UPDATER"); //Assign to judgeStaking on deployment
 
     uint256 public totalBaseRewardsFunded; //Total rewards sent to rewardsManager From treasury excluding bonus rewards.
     uint256 public teamFundingReceived;
     uint256 public treasuryPreciseBalance; //Exact total amount of judgeTokens in treasury contract excluding misplaced judgeTokens
     uint8 public constant FEE_PERCENT_MAX_THRESHOLD = 30;
+    uint256 public constant MIN_BONUS_DURATION = 50_400; //1 week min duration == 50400 blocks
     uint256 public minBonus;
     uint256 public judgeRecoveryMinimumThreshold; //Feasible minimum amount of JudgeTokens that's worth recovering
     uint256 public immutable MIN_QUARTERLY_REWARD_ALLOCATION; //Lower bound of quarterly reward allocation
@@ -245,7 +244,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
     function addBonusToQuarterReward(
         uint256 _bonus,
         uint256 _durationInBlocks
-    ) external nonReentrant {
+    ) external onlyRole(FUND_MANAGER_ROLE) nonReentrant {
         uint32 currentQuarterIndex = judgeStaking.getCurrentQuarterIndex();
         uint256 stakingStart = judgeStaking.stakingPoolStartBlock();
         uint256 quarterBlocks = judgeStaking.QUARTER_BLOCKS();
@@ -258,7 +257,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         if (!quarters[currentQuarterIndex].isFunded) {
             revert CurrentQuarterAllocationNotYetFunded();
         }
-        if (_durationInBlocks < 50_400) revert DurationTooLow(); //1 week min duration == 50400 blocks
+        if (_durationInBlocks < MIN_BONUS_DURATION) revert DurationTooLow(); 
         if (_durationInBlocks > quarterEndBlock - b) {
             revert DurationBeyondQuarterEnd();
         }

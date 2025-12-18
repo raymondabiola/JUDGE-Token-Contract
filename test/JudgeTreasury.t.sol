@@ -326,6 +326,16 @@ contract JudgeTreasuryTest is Test {
         vm.roll(q1Start);
         judgeTreasury.fundRewardsManager(1);
 
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                AccessControlUnauthorizedAccount.selector,
+                user1,
+                fundManager
+            )
+        );
+        vm.prank(user1);
+        judgeTreasury.addBonusToQuarterReward(bonus, 100_000);
+
         vm.expectRevert(DurationTooLow.selector);
         judgeTreasury.addBonusToQuarterReward(bonus, 50_399);
 
@@ -631,6 +641,8 @@ contract JudgeTreasuryTest is Test {
         judgeTreasury.grantRole(fundManagerAdminTreasury, owner);
         judgeTreasury.fundRewardsManager(1);
         vm.roll(startBlock + 324_000);
+
+        judgeTreasury.grantRole(fundManagerAdminTreasury, user1);
 
         vm.startPrank(user1);
         judgeToken.approve(address(judgeTreasury), bonus);
