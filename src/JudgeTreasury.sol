@@ -257,7 +257,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         if (!quarters[currentQuarterIndex].isFunded) {
             revert CurrentQuarterAllocationNotYetFunded();
         }
-        if (_durationInBlocks < MIN_BONUS_DURATION) revert DurationTooLow(); 
+        if (_durationInBlocks < MIN_BONUS_DURATION) revert DurationTooLow();
         if (_durationInBlocks > quarterEndBlock - b) {
             revert DurationBeyondQuarterEnd();
         }
@@ -265,6 +265,8 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
         if (b < quarters[currentQuarterIndex].currentBonusEndBlock) {
             revert LastBonusStillRunning();
         }
+
+        JudgeStaking.updatePool();
 
         quarters[currentQuarterIndex].currentBonus = _bonus;
         quarters[currentQuarterIndex].totalBonusReceived += _bonus;

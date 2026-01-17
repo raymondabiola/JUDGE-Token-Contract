@@ -307,7 +307,6 @@ contract JudgeTreasuryTest is Test {
         uint256 secondQuarterRewards = 1_250_000 * 10 ** uint256(decimals);
         uint256 bonus = 20_000 * 10 ** uint256(decimals);
         uint256 bonus2 = 999e18;
-        uint256 invalidRewards;
         uint256 q2Start = q1Start + 648_000;
 
         judgeTreasury.grantRole(fundManager, owner);

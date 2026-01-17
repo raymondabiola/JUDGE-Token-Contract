@@ -34,7 +34,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
     uint256 public constant SCALE = 1e18; // 18 decimals
     uint256 public constant QUARTER_BLOCKS = 648_000; // ~90 days at 12s/block
     uint16 public constant BLOCKS_PER_DAY = 7200;
-    uint32 public constant BLOCKS_PER_YEAR = 2_628_000; // 12 sec blocktime
+    uint32 public constant BLOCKS_PER_YEAR = 2_628_000; // 12 sec blocktime for sepolia
     uint8 public constant MAX_UPDATE_QUARTERS = 4;
     uint8 public constant MAX_SIMULATED_QUARTERS = 12; // Safe for simulation. Wont break RPC
     uint16 public constant MAX_LOCK_UP_PERIOD_DAYS = 360; // 1 year max lock assumed at 360 days
