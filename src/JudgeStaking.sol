@@ -339,6 +339,15 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             startQuarter <= currentQuarterIndex &&
             processed < MAX_UPDATE_QUARTERS
         ) {
+            //This prevents DoS when admin forgets to set quarterly rewards for present or even pastQuarters
+            uint256 rbp = 0;
+            uint256 bpb = 0;
+
+            if (startQuarter < judgeTreasury.quarterIndex()) {
+                rpb = rewardsPerBlockForQuarter[startQuarter];
+                bpb = bonusPerBlockForQuarter[startQuarter];
+            }
+
             JudgeTreasury.QuarterInfo memory q = judgeTreasury.getQuarterInfo(
                 startQuarter
             );
@@ -351,10 +360,7 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                 ? blockNum
                 : quarterEndBlock;
 
-            if (
-                rewardsPerBlockForQuarter[startQuarter] == 0 &&
-                bonusPerBlockForQuarter[startQuarter] == 0
-            ) {
+            if (rpb == 0 && bpb == 0) {
                 if (endBlock > lastRewardBlock) {
                     lastRewardBlock = endBlock;
                 }

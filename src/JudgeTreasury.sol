@@ -39,7 +39,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
 
     Settings public settings;
 
-    uint32 quarterIndex;
+    uint32 public quarterIndex;
 
     struct QuarterInfo {
         uint256 baseReward;
@@ -266,7 +266,7 @@ contract JudgeTreasury is AccessControl, ReentrancyGuard {
             revert LastBonusStillRunning();
         }
 
-        JudgeStaking.updatePool();
+        judgeStaking.updatePool(); //
 
         quarters[currentQuarterIndex].currentBonus = _bonus;
         quarters[currentQuarterIndex].totalBonusReceived += _bonus;
