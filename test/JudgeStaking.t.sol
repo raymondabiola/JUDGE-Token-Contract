@@ -246,7 +246,7 @@ contract JudgeStakingTest is Test {
 
     function testSyncQuarterBonusRewardsPerBlock() public {}
 
-    function testUpdatePoolbehaviour
+    function testUpdatePoolbehaviour() public {}
 
     function testGetCurrentApr() public {
         bytes32 treasuryAdmin = judgeTreasury.TREASURY_ADMIN_ROLE();

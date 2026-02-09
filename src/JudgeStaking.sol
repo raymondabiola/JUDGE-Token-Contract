@@ -340,13 +340,9 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
             processed < MAX_UPDATE_QUARTERS
         ) {
             //This prevents DoS when admin forgets to set quarterly rewards for present or even pastQuarters
-            uint256 rbp = 0;
-            uint256 bpb = 0;
 
-            if (startQuarter < judgeTreasury.quarterIndex()) {
-                rpb = rewardsPerBlockForQuarter[startQuarter];
-                bpb = bonusPerBlockForQuarter[startQuarter];
-            }
+            uint256 rpb = rewardsPerBlockForQuarter[startQuarter];
+            uint256 bpb = bonusPerBlockForQuarter[startQuarter];
 
             JudgeTreasury.QuarterInfo memory q = judgeTreasury.getQuarterInfo(
                 startQuarter
@@ -356,73 +352,66 @@ contract JudgeStaking is AccessControl, ReentrancyGuard {
                 QUARTER_BLOCKS;
             uint256 quarterEndBlock = quarterStartBlock + QUARTER_BLOCKS;
 
-            uint256 endBlock = (startQuarter == currentQuarterIndex)
+            uint256 perIterationEndBlock = (startQuarter == currentQuarterIndex)
                 ? blockNum
                 : quarterEndBlock;
 
-            if (rpb == 0 && bpb == 0) {
-                if (endBlock > lastRewardBlock) {
-                    lastRewardBlock = endBlock;
-                }
+            if (perIterationEndBlock > lastRewardBlock) {
+                if (rpb == 0 && bpb == 0) {
+                    lastRewardBlock = perIterationEndBlock;
+                    settings.lastFullyUpdatedQuarter = startQuarter;
 
-                settings.lastFullyUpdatedQuarter = startQuarter;
+                    unchecked {
+                        startQuarter++;
+                        processed++;
+                        continue;
+                    }
+                } else {
+                    uint256 blocksPassed = perIterationEndBlock -
+                        lastRewardBlock;
+                    uint256 reward = blocksPassed * rpb;
+                    accJudgePerShare += Math.mulDiv(
+                        reward,
+                        SCALE,
+                        localTotalStakeWeight
+                    );
+
+                    uint256 bonusStart = q.currentBonusStartBlock;
+                    uint256 bonusEnd = q.currentBonusEndBlock;
+                    uint256 bonusBlocks = 0;
+
+                    if (bonusEnd > lastRewardBlock) {
+                        uint256 effectiveStart = lastRewardBlock > bonusStart
+                            ? lastRewardBlock
+                            : bonusStart;
+
+                        uint256 effectiveEnd = perIterationEndBlock > bonusEnd
+                            ? bonusEnd
+                            : perIterationEndBlock;
+
+                        if (effectiveEnd > effectiveStart) {
+                            bonusBlocks = effectiveEnd - effectiveStart;
+                        }
+                    }
+
+                    uint256 bonusReward = Math.mulDiv(bonusBlocks, bpb, SCALE);
+                    accBonusJudgePerShare += Math.mulDiv(
+                        bonusReward,
+                        SCALE,
+                        localTotalStakeWeight
+                    );
+
+                    totalAccruedBaseRewards += reward;
+                    totalAccruedBonusRewards += bonusReward;
+
+                    lastRewardBlock = perIterationEndBlock;
+                    settings.lastFullyUpdatedQuarter = startQuarter;
+                }
 
                 unchecked {
                     startQuarter++;
                     processed++;
-                    continue;
                 }
-            }
-
-            if (endBlock > lastRewardBlock) {
-                uint256 blocksPassed = endBlock - lastRewardBlock;
-                uint256 reward = blocksPassed *
-                    rewardsPerBlockForQuarter[startQuarter];
-                accJudgePerShare += Math.mulDiv(
-                    reward,
-                    SCALE,
-                    localTotalStakeWeight
-                );
-
-                uint256 bonusStart = q.currentBonusStartBlock;
-                uint256 bonusEnd = q.currentBonusEndBlock;
-                uint256 bonusBlocks = 0;
-
-                if (bonusEnd > lastRewardBlock) {
-                    uint256 effectiveStart = lastRewardBlock > bonusStart
-                        ? lastRewardBlock
-                        : bonusStart;
-
-                    uint256 effectiveEnd = endBlock > bonusEnd
-                        ? bonusEnd
-                        : endBlock;
-
-                    if (effectiveEnd > effectiveStart) {
-                        bonusBlocks = effectiveEnd - effectiveStart;
-                    }
-                }
-
-                uint256 bonusReward = Math.mulDiv(
-                    bonusBlocks,
-                    bonusPerBlockForQuarter[startQuarter],
-                    SCALE
-                );
-                accBonusJudgePerShare += Math.mulDiv(
-                    bonusReward,
-                    SCALE,
-                    localTotalStakeWeight
-                );
-
-                totalAccruedBaseRewards += reward;
-                totalAccruedBonusRewards += bonusReward;
-
-                lastRewardBlock = endBlock;
-                settings.lastFullyUpdatedQuarter = startQuarter;
-            }
-
-            unchecked {
-                startQuarter++;
-                processed++;
             }
         }
     }
